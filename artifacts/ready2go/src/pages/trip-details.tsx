@@ -33,6 +33,7 @@ import { TripMap, PoiClickData } from "@/components/trip-map";
 import type { ActiviteInitialVenue } from "@/components/activite-form";
 import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
+import { WeatherWidget } from "@/components/weather-widget";
 import logoImg from "@assets/1774511272544_1774511318297.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -970,6 +971,14 @@ export default function TripDetails() {
 
       {/* ── Interactive map ─ own section below header ─────────────────── */}
       <div className="max-w-3xl mx-auto px-4 -mt-5 mb-6 relative z-20">
+        {/* Weather widget */}
+        <div className="mb-2">
+          <WeatherWidget
+            destination={trip.destination}
+            startDate={trip.startDate}
+            endDate={trip.endDate}
+          />
+        </div>
         <TripMap
           key={(trip.events as any[])?.map((e: any) => e.id).join(",") || "empty"}
           events={trip.events as any[]}
