@@ -7,7 +7,8 @@ import {
   ChevronLeft, Plus, MapPin, CalendarDays, Copy,
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
-  ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink
+  ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
+  RefreshCw, Navigation
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -28,7 +29,9 @@ import { TransportForm, TransportSubmitData } from "@/components/transport-form"
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
 import { ActiviteForm, ActiviteSubmitData, ACTIVITE_EMOJI, ACTIVITE_LABEL } from "@/components/activite-form";
-import { TripMap } from "@/components/trip-map";
+import { TripMap, PoiClickData } from "@/components/trip-map";
+import type { ActiviteInitialVenue } from "@/components/activite-form";
+import type { RestaurationInitialVenue } from "@/components/restauration-form";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -794,7 +797,33 @@ export default function TripDetails() {
 
   const [activeTab, setActiveTab] = useState<"program" | "group">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
+  const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+  const [pendingPoiVenue, setPendingPoiVenue] = useState<PoiClickData | null>(null);
+  const [navPoi, setNavPoi] = useState<PoiClickData | null>(null);
+  const [mapSelectMode, setMapSelectMode] = useState(false);
+
+  const handlePoiClick = (poi: PoiClickData) => {
+    if (mapSelectMode) {
+      setPendingPoiVenue(poi);
+      setMapSelectMode(false);
+      setIsAddEventOpen(true);
+      return;
+    }
+    if (!isAddEventOpen) return;
+    if (addEventType === "activite" || addEventType === "restauration" || addEventType === "logement") {
+      setPendingPoiVenue(poi);
+    } else {
+      setNavPoi(poi);
+    }
+  };
+
+  const handleRequestMapSelect = () => {
+    setIsAddEventOpen(false);
+    setMapSelectMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const { data: trip, isLoading, isError } = useGetTrip(tripId, { query: { enabled: !!tripId } });
 
@@ -877,16 +906,32 @@ export default function TripDetails() {
             </div>
           </div>
 
-          {/* Interactive map — key forces re-init when events change */}
-          <TripMap
-            key={(trip.events as any[])?.map((e: any) => e.id).join(",") || "empty"}
-            events={trip.events as any[]}
-            destination={trip.destination}
-          />
-        </div>
+            </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 mt-6 relative z-10">
+      {/* ── Interactive map ─ own section below header ─────────────────── */}
+      <div className="max-w-3xl mx-auto px-4 -mt-5 mb-6 relative z-20">
+        <TripMap
+          key={(trip.events as any[])?.map((e: any) => e.id).join(",") || "empty"}
+          events={trip.events as any[]}
+          destination={trip.destination}
+          isAddingEvent={isAddEventOpen}
+          mapSelectMode={mapSelectMode}
+          activeEventType={addEventType}
+          focusedEventId={focusedEventId}
+          onPoiClick={handlePoiClick}
+        />
+        {focusedEventId && (
+          <button
+            onClick={() => setFocusedEventId(null)}
+            className="absolute top-2 right-4 z-30 flex items-center gap-1 bg-white/90 hover:bg-white text-xs font-semibold text-slate-700 px-2.5 py-1 rounded-full shadow border border-white/50 transition-all"
+          >
+            <RefreshCw className="w-3 h-3" /> Reprendre le tour
+          </button>
+        )}
+      </div>
+
+      <main className="max-w-3xl mx-auto px-4 relative z-10">
         {/* Tabs */}
         <div className="bg-card p-1.5 rounded-2xl shadow-lg border border-border/50 flex mb-8">
           <button
@@ -943,8 +988,19 @@ export default function TripDetails() {
                         const colorParts = meta.colorClass.split(" ");
                         const dotBg = colorParts[0].replace("text-", "bg-");
                         return (
-                          <div key={event.id} className="relative pl-6">
-                            <div className={cn("absolute -left-[11px] top-4 w-5 h-5 rounded-full border-4 border-background", colorParts[1], dotBg)} />
+                          <div key={event.id} className="relative pl-6 group">
+                            <button
+                              onClick={() => {
+                                setFocusedEventId(focusedEventId === event.id ? null : event.id);
+                                window.scrollTo({ top: 0, behavior: "smooth" });
+                              }}
+                              title="Voir sur la carte"
+                              className={cn(
+                                "absolute -left-[11px] top-4 w-5 h-5 rounded-full border-4 border-background transition-all",
+                                colorParts[1], dotBg,
+                                focusedEventId === event.id ? "scale-125 ring-2 ring-offset-1 ring-primary" : "hover:scale-110"
+                              )}
+                            />
                             {event.type === "transport" ? (
                               <TransportCard
                                 event={event as any}
@@ -1035,14 +1091,53 @@ export default function TripDetails() {
         </motion.button>
       )}
 
+      {/* Navigation POI modal — Maps/Waze for non-venue event types */}
+      {navPoi && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={() => setNavPoi(null)}>
+          <div className="bg-card w-full max-w-sm mx-4 mb-6 rounded-2xl p-5 shadow-2xl border border-border/50" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-2xl">{navPoi.emoji}</span>
+              <div>
+                <p className="font-bold leading-tight">{navPoi.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Ouvrir l'itinéraire vers ce lieu</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <a
+                href={getMapsUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => setNavPoi(null)}
+                className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl py-3 text-sm font-semibold hover:bg-blue-100 transition"
+              >
+                <Navigation className="w-4 h-4" /> Google Maps
+              </a>
+              <a
+                href={getWazeUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => setNavPoi(null)}
+                className="flex-1 flex items-center justify-center gap-2 bg-sky-50 text-sky-600 border border-sky-200 rounded-xl py-3 text-sm font-semibold hover:bg-sky-100 transition"
+              >
+                🚗 Waze
+              </a>
+            </div>
+            <button onClick={() => setNavPoi(null)} className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground transition">Fermer</button>
+          </div>
+        </div>
+      )}
+
       {/* Add Event Modal */}
       <AddEventModal
         isOpen={isAddEventOpen}
-        onClose={() => setIsAddEventOpen(false)}
+        onClose={() => { setIsAddEventOpen(false); setPendingPoiVenue(null); }}
         onAdd={(data: any) => createEventMutation.mutate({ tripId, data: { ...data, creatorId: userId! } as any })}
         isPending={createEventMutation.isPending}
         tripStartDate={trip.startDate}
         tripEndDate={trip.endDate}
+        selectedType={addEventType}
+        onTypeChange={setAddEventType}
+        pendingPoiVenue={pendingPoiVenue}
+        onPoiVenueConsumed={() => setPendingPoiVenue(null)}
+        onMapSelectRequest={handleRequestMapSelect}
       />
     </div>
   );
@@ -1050,15 +1145,19 @@ export default function TripDetails() {
 
 // ─── Add Event Modal ──────────────────────────────────────────────────────────
 
-function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripEndDate }: {
+function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripEndDate, selectedType, onTypeChange, pendingPoiVenue, onPoiVenueConsumed, onMapSelectRequest }: {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (data: any) => void;
   isPending: boolean;
   tripStartDate: string;
   tripEndDate: string;
+  selectedType: EventType;
+  onTypeChange: (t: EventType) => void;
+  pendingPoiVenue?: PoiClickData | null;
+  onPoiVenueConsumed?: () => void;
+  onMapSelectRequest?: () => void;
 }) {
-  const [selectedType, setSelectedType] = useState<EventType>("activite");
   const [formData, setFormData] = useState({
     title: "",
     date: tripStartDate,
@@ -1102,7 +1201,7 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
               <button
                 key={key}
                 type="button"
-                onClick={() => setSelectedType(key as EventType)}
+                onClick={() => onTypeChange(key as EventType)}
                 className={cn(
                   "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all",
                   isSelected
@@ -1119,6 +1218,15 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
       </div>
 
       {/* Specialised forms */}
+      {/* Pending POI venue flash banner */}
+      {pendingPoiVenue && (selectedType === "activite" || selectedType === "restauration") && (
+        <div className="mb-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-3 py-2 text-xs font-medium">
+          <span className="text-base">{pendingPoiVenue.emoji}</span>
+          <span className="flex-1 truncate"><b>{pendingPoiVenue.name}</b> importé depuis la carte ✓</span>
+          <button onClick={onPoiVenueConsumed} className="text-emerald-600 hover:text-emerald-800 font-bold ml-1">✕</button>
+        </div>
+      )}
+
       {selectedType === "transport" ? (
         <TransportForm
           tripDate={tripStartDate}
@@ -1145,6 +1253,14 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           onSubmit={handleRestaurationSubmit}
           isPending={isPending}
           onCancel={onClose}
+          onRequestMapSelect={onMapSelectRequest}
+          initialVenue={pendingPoiVenue ? {
+            name: pendingPoiVenue.name,
+            lat: pendingPoiVenue.lat,
+            lon: pendingPoiVenue.lon,
+            address: pendingPoiVenue.address,
+            tags: pendingPoiVenue.tags,
+          } as RestaurationInitialVenue : null}
         />
       ) : selectedType === "activite" ? (
         <ActiviteForm
@@ -1154,6 +1270,14 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           onSubmit={handleActiviteSubmit}
           isPending={isPending}
           onCancel={onClose}
+          onRequestMapSelect={onMapSelectRequest}
+          initialVenue={pendingPoiVenue ? {
+            name: pendingPoiVenue.name,
+            lat: pendingPoiVenue.lat,
+            lon: pendingPoiVenue.lon,
+            address: pendingPoiVenue.address,
+            tags: pendingPoiVenue.tags,
+          } as ActiviteInitialVenue : null}
         />
       ) : (
         /* Simple form for other types */

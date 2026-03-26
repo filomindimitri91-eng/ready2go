@@ -262,6 +262,16 @@ export interface ActiviteSubmitData {
   activiteData: Record<string, unknown>;
 }
 
+export interface ActiviteInitialVenue {
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  city?: string;
+  country?: string;
+  tags?: Record<string, string>;
+}
+
 interface Props {
   tripDate: string;
   tripStartDate: string;
@@ -269,6 +279,8 @@ interface Props {
   onSubmit: (data: ActiviteSubmitData) => void;
   isPending: boolean;
   onCancel: () => void;
+  initialVenue?: ActiviteInitialVenue | null;
+  onRequestMapSelect?: () => void;
 }
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -291,10 +303,35 @@ const blank = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel }: Props) {
+function activiteTypeFromTags(tags?: Record<string, string>): string {
+  if (!tags) return "";
+  if (tags.tourism === "museum") return "musee";
+  if (tags.historic === "castle") return "monument";
+  if (tags.historic === "church") return "visite";
+  if (tags.tourism === "viewpoint") return "visite";
+  if (tags.tourism === "attraction") return "monument";
+  return "visite";
+}
+
+export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialVenue, onRequestMapSelect }: Props) {
   const [d, setD] = useState({ ...blank, date: tripDate });
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
   const [ticket, setTicket] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
+
+  // Pre-fill from POI click on map
+  useEffect(() => {
+    if (!initialVenue) return;
+    setD(prev => ({
+      ...prev,
+      name:         initialVenue.name,
+      address:      initialVenue.address ?? prev.address,
+      city:         initialVenue.city ?? prev.city,
+      country:      initialVenue.country ?? prev.country,
+      latitude:     String(initialVenue.lat),
+      longitude:    String(initialVenue.lon),
+      activiteType: activiteTypeFromTags(initialVenue.tags) || prev.activiteType,
+    }));
+  }, [initialVenue]);
 
   const selectedType = ACTIVITE_TYPES.find(t => t.value === d.activiteType);
   const fullAddress = [d.address, d.city, d.country].filter(Boolean).join(", ");
@@ -377,6 +414,15 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
         <>
           {/* ── Lieu ── */}
           <Section title="Lieu">
+            {onRequestMapSelect && (
+              <button
+                type="button"
+                onClick={onRequestMapSelect}
+                className="w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-xl py-2.5 mb-1 transition-colors"
+              >
+                🗺️ Choisir un lieu sur la carte
+              </button>
+            )}
             <VenueSearch activiteType={d.activiteType} onSelect={handleVenueSelect} />
 
             <TextInput label="Nom du lieu" value={d.name} onChange={set("name")}

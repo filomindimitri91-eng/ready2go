@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Event } from "@workspace/api-client-react";
+import { RefreshCw, Play } from "lucide-react";
 
 // ─── Fix leaflet marker icon path (bundler issue) ─────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -11,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// ─── Transport type emoji map ─────────────────────────────────────────────────
+// ─── Emoji maps ───────────────────────────────────────────────────────────────
 const TRANSPORT_EMOJI: Record<string, string> = {
   plane: "✈️", train: "🚄", bus: "🚌", ferry: "⛴️",
   metro: "🚇", carRental: "🚗", taxi: "🚕", other: "🔄",
@@ -30,21 +31,33 @@ const ACTIVITE_EMOJI: Record<string, string> = {
   parc: "🎡", autre: "📍",
 };
 
+// ─── POI click data (exported for parent) ─────────────────────────────────────
+export interface PoiClickData {
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  emoji: string;
+  tags: Record<string, string>;
+}
+
+// ─── Tour step ────────────────────────────────────────────────────────────────
+interface TourStep {
+  coords: [number, number];
+  zoom: number;
+  label: string;
+  eventId?: string;
+}
+
 // ─── Geocoding cache ──────────────────────────────────────────────────────────
 const geoCache = new Map<string, [number, number] | null>();
 
-/** Simplify a location string for Nominatim:
- *  "Paris - Charles de Gaulle (CDG)" → try full, then "Paris Charles de Gaulle", then "Paris"
- *  "Barcelona - El Prat (BCN)"        → try full, then "Barcelona El Prat", then "Barcelona" */
 function buildQueryVariants(raw: string): string[] {
   const variants: string[] = [raw];
-  // Remove content in parentheses: "Paris (CDG)" → "Paris"
   const noParen = raw.replace(/\s*\([^)]*\)/g, "").trim();
   if (noParen && noParen !== raw) variants.push(noParen);
-  // Replace dashes with spaces: "Paris - Charles" → "Paris Charles"
   const noDash = noParen.replace(/\s*[-–]\s*/g, " ").trim();
   if (noDash && noDash !== noParen) variants.push(noDash);
-  // First word only (city): "Paris Charles de Gaulle" → "Paris"
   const firstWord = noDash.split(/\s+/)[0];
   if (firstWord && firstWord !== noDash) variants.push(firstWord);
   return [...new Set(variants)];
@@ -63,103 +76,83 @@ async function geocodeOne(query: string): Promise<[number, number] | null> {
 async function geocode(query: string): Promise<[number, number] | null> {
   if (!query.trim()) return null;
   if (geoCache.has(query)) return geoCache.get(query)!;
-  const variants = buildQueryVariants(query);
-  for (const v of variants) {
+  for (const v of buildQueryVariants(query)) {
     const result = await geocodeOne(v);
-    if (result) {
-      geoCache.set(query, result);
-      return result;
-    }
+    if (result) { geoCache.set(query, result); return result; }
   }
   geoCache.set(query, null);
   return null;
 }
 
-// ─── Create custom emoji marker ───────────────────────────────────────────────
-function emojiIcon(emoji: string, color: string = "#fff", bg: string = "#1d4ed8") {
+// ─── Emoji marker icons ───────────────────────────────────────────────────────
+function emojiIcon(emoji: string, bg: string = "#1d4ed8", pulse = false) {
   return L.divIcon({
     className: "",
     html: `
       <div style="
         display:flex;align-items:center;justify-content:center;
-        width:36px;height:36px;
+        width:38px;height:38px;
         background:${bg};
         border:3px solid #fff;
         border-radius:50%;
-        box-shadow:0 2px 8px rgba(0,0,0,0.35);
-        font-size:16px;
-        line-height:1;
-        cursor:pointer;
+        box-shadow:0 2px 10px rgba(0,0,0,0.4);
+        font-size:17px;line-height:1;cursor:pointer;
+        ${pulse ? "animation:r2g-pulse 1.5s ease-in-out infinite;" : ""}
       ">${emoji}</div>
       <div style="
         width:0;height:0;
         border-left:6px solid transparent;
         border-right:6px solid transparent;
-        border-top:8px solid ${bg};
-        margin:-1px auto 0;
-        width:12px;
-      "></div>
-    `,
-    iconSize: [36, 46],
-    iconAnchor: [18, 46],
-    popupAnchor: [0, -46],
+        border-top:9px solid ${bg};
+        margin:-2px auto 0;width:12px;
+      "></div>`,
+    iconSize: [38, 48],
+    iconAnchor: [19, 48],
+    popupAnchor: [0, -50],
   });
 }
 
-function poiIcon(emoji: string) {
+function poiIcon(emoji: string, highlighted = false) {
   return L.divIcon({
     className: "",
-    html: `<div style="font-size:20px;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5));line-height:1;">${emoji}</div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -14],
+    html: `<div style="
+      font-size:${highlighted ? "24px" : "20px"};
+      filter:drop-shadow(0 1px 4px rgba(0,0,0,0.55));
+      line-height:1;
+      cursor:pointer;
+      ${highlighted ? "animation:r2g-bounce 0.8s ease-in-out infinite;" : ""}
+    ">${emoji}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
   });
 }
 
-// ─── Event color/emoji extraction ────────────────────────────────────────────
+// ─── Event helpers ────────────────────────────────────────────────────────────
 function getEventEmoji(event: Event): { emoji: string; bg: string } {
   const d = event as any;
   switch (event.type) {
-    case "transport": {
-      const tt = d.transportData?.transportType ?? "other";
-      return { emoji: TRANSPORT_EMOJI[tt] ?? "🔄", bg: "#1d4ed8" };
-    }
-    case "logement": {
-      const lt = d.lodgingData?.lodgingType ?? "other";
-      return { emoji: LODGING_EMOJI[lt] ?? "🏨", bg: "#7c3aed" };
-    }
+    case "transport": return { emoji: TRANSPORT_EMOJI[d.transportData?.transportType ?? "other"] ?? "🔄", bg: "#1d4ed8" };
+    case "logement":  return { emoji: LODGING_EMOJI[d.lodgingData?.lodgingType ?? "other"] ?? "🏨", bg: "#7c3aed" };
     case "restauration":
-    case "reunion": {
-      const rt = d.restaurationData?.restoType ?? "autre";
-      return { emoji: RESTO_EMOJI[rt] ?? "🍽️", bg: "#ea580c" };
-    }
-    case "activite": {
-      const at = d.activiteData?.activiteType ?? "autre";
-      return { emoji: ACTIVITE_EMOJI[at] ?? "📍", bg: "#d97706" };
-    }
-    default:
-      return { emoji: "📌", bg: "#64748b" };
+    case "reunion":   return { emoji: RESTO_EMOJI[d.restaurationData?.restoType ?? "autre"] ?? "🍽️", bg: "#ea580c" };
+    case "activite":  return { emoji: ACTIVITE_EMOJI[d.activiteData?.activiteType ?? "autre"] ?? "📍", bg: "#d97706" };
+    default:          return { emoji: "📌", bg: "#64748b" };
   }
 }
 
-// ─── Extract known coords from event data ─────────────────────────────────────
 function extractKnownCoords(event: Event): [number, number] | null {
   const d = event as any;
-  const tryCoords = (lat: any, lng: any): [number, number] | null => {
-    const la = Number(lat), lo = Number(lng);
-    if (!isNaN(la) && !isNaN(lo) && (la !== 0 || lo !== 0)) return [la, lo];
-    return null;
+  const ok = (la: any, lo: any): [number, number] | null => {
+    const a = Number(la), o = Number(lo);
+    return (!isNaN(a) && !isNaN(o) && (a !== 0 || o !== 0)) ? [a, o] : null;
   };
-  if (event.type === "logement")
-    return tryCoords(d.lodgingData?.latitude, d.lodgingData?.longitude);
-  if (event.type === "restauration" || event.type === "reunion")
-    return tryCoords(d.restaurationData?.latitude, d.restaurationData?.longitude);
-  if (event.type === "activite")
-    return tryCoords(d.activiteData?.latitude, d.activiteData?.longitude);
+  if (event.type === "logement")   return ok(d.lodgingData?.latitude, d.lodgingData?.longitude);
+  if (event.type === "restauration" || event.type === "reunion") return ok(d.restaurationData?.latitude, d.restaurationData?.longitude);
+  if (event.type === "activite")   return ok(d.activiteData?.latitude, d.activiteData?.longitude);
   return null;
 }
 
-// ─── Build geocoding query for event ─────────────────────────────────────────
 function buildGeoQuery(event: Event): string | null {
   const d = event as any;
   if (event.type === "logement") {
@@ -168,7 +161,7 @@ function buildGeoQuery(event: Event): string | null {
   }
   if (event.type === "restauration" || event.type === "reunion") {
     const rd = d.restaurationData;
-    return [rd?.address, rd?.city, rd?.country].filter(Boolean).join(", ") || null;
+    return [rd?.name, rd?.address, rd?.city, rd?.country].filter(Boolean).join(", ") || null;
   }
   if (event.type === "activite") {
     const ad = d.activiteData;
@@ -177,19 +170,22 @@ function buildGeoQuery(event: Event): string | null {
   return event.location;
 }
 
-// ─── Overpass: fetch tourist attractions near center ─────────────────────────
-const POI_TYPE_EMOJI: Array<{ emoji: string; label: string; query: string }> = [
-  { emoji: "🏛️", label: "Monument",   query: `node["tourism"="attraction"]` },
-  { emoji: "🖼️", label: "Musée",     query: `node["tourism"="museum"]` },
-  { emoji: "⛪", label: "Église",    query: `node["historic"="church"]` },
-  { emoji: "🏰", label: "Château",   query: `node["historic"="castle"]` },
-  { emoji: "🌅", label: "Point de vue", query: `node["tourism"="viewpoint"]` },
-];
+// ─── Overpass POIs ─────────────────────────────────────────────────────────────
+export interface PoiItem {
+  lat: number; lon: number; name: string; emoji: string;
+  tags: Record<string, string>;
+}
 
-async function fetchPOIs(lat: number, lon: number): Promise<Array<{ lat: number; lon: number; name: string; emoji: string }>> {
+async function fetchPOIs(lat: number, lon: number): Promise<PoiItem[]> {
   const radius = 5000;
-  const types = POI_TYPE_EMOJI.map(t => `${t.query}(around:${radius},${lat},${lon});`).join("\n");
-  const query = `[out:json][timeout:10];(\n${types}\n);out 15;`;
+  const queries = [
+    `node["tourism"="attraction"]`,
+    `node["tourism"="museum"]`,
+    `node["historic"="church"]`,
+    `node["historic"="castle"]`,
+    `node["tourism"="viewpoint"]`,
+  ].map(q => `${q}(around:${radius},${lat},${lon});`).join("\n");
+  const query = `[out:json][timeout:10];(\n${queries}\n);out 15;`;
   try {
     const res = await fetch("https://overpass-api.de/api/interpreter", {
       method: "POST",
@@ -197,52 +193,111 @@ async function fetchPOIs(lat: number, lon: number): Promise<Array<{ lat: number;
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
     const data = await res.json();
-    const items: Array<{ lat: number; lon: number; name: string; emoji: string }> = [];
+    const items: PoiItem[] = [];
     for (const el of (data.elements ?? []).slice(0, 15)) {
-      const name = el.tags?.name || el.tags?.["name:fr"] || "Point d'intérêt";
-      const emoji = el.tags?.tourism === "museum" ? "🖼️"
-        : el.tags?.tourism === "viewpoint" ? "🌅"
-        : el.tags?.historic === "castle" ? "🏰"
-        : el.tags?.historic === "church" ? "⛪"
+      const tags: Record<string, string> = el.tags ?? {};
+      const name = tags.name || tags["name:fr"] || "Point d'intérêt";
+      const emoji = tags.tourism === "museum" ? "🖼️"
+        : tags.tourism === "viewpoint" ? "🌅"
+        : tags.historic === "castle" ? "🏰"
+        : tags.historic === "church" ? "⛪"
         : "🏛️";
-      items.push({ lat: el.lat, lon: el.lon, name, emoji });
+      items.push({ lat: el.lat, lon: el.lon, name, emoji, tags });
     }
     return items;
   } catch { return []; }
 }
 
-// ─── Animated dashed polyline CSS ─────────────────────────────────────────────
+// ─── Animated CSS ──────────────────────────────────────────────────────────────
 const ANIM_STYLE = `
 .animated-route {
   stroke-dasharray: 14 8;
   animation: dash-flow 1.8s linear infinite;
 }
-@keyframes dash-flow {
-  to { stroke-dashoffset: -22; }
+@keyframes dash-flow { to { stroke-dashoffset: -22; } }
+@keyframes r2g-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.6), 0 2px 10px rgba(0,0,0,0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(255,255,255,0),  0 2px 10px rgba(0,0,0,0.4); }
+}
+@keyframes r2g-bounce {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
 }
 `;
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
+// ─── Component ────────────────────────────────────────────────────────────────
 interface TripMapProps {
   events: Event[];
   destination: string;
+  isAddingEvent?: boolean;
+  mapSelectMode?: boolean;
+  activeEventType?: string;
+  focusedEventId?: string | null;
+  onPoiClick?: (poi: PoiClickData) => void;
 }
 
-export function TripMap({ events, destination }: TripMapProps) {
+export function TripMap({
+  events,
+  destination,
+  isAddingEvent = false,
+  mapSelectMode = false,
+  activeEventType,
+  focusedEventId,
+  onPoiClick,
+}: TripMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const [loading, setLoading] = useState(true);
+  const mapRef       = useRef<L.Map | null>(null);
 
+  // Tour state
+  const tourStepsRef      = useRef<TourStep[]>([]);
+  const eventCoordsRef    = useRef<Map<string, [number, number]>>(new Map());
+  const tourTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tourActiveRef     = useRef(false);
+  const tourIndexRef      = useRef(0);
+  const mapReadyRef       = useRef(false);
+  const advanceFnRef      = useRef<() => void>(() => {});
+
+  const [loading, setLoading] = useState(true);
+  const [tourPaused, setTourPaused] = useState(false);
+  // Track programmatic flyTo so we don't pause the tour on its own zoomstart
+  const isProgrammaticRef = useRef(false);
+  // Mutable refs for props — so POI click handlers can read current values without re-creating markers
+  const isAddingEventRef   = useRef(isAddingEvent);
+  const mapSelectModeRef   = useRef(mapSelectMode);
+  const activeEventTypeRef = useRef(activeEventType);
+  const onPoiClickRef      = useRef(onPoiClick);
+
+  // ─── Tour control functions ──────────────────────────────────────────────
+  const stopTour = () => {
+    tourActiveRef.current = false;
+    if (tourTimerRef.current) { clearTimeout(tourTimerRef.current); tourTimerRef.current = null; }
+    setTourPaused(true);
+  };
+
+  const startTour = (fromIndex = 0) => {
+    if (!mapReadyRef.current || tourStepsRef.current.length === 0) return;
+    tourActiveRef.current = true;
+    tourIndexRef.current = fromIndex;
+    setTourPaused(false);
+    if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+    advanceFnRef.current();
+  };
+
+  // Keep prop refs in sync
+  useEffect(() => { isAddingEventRef.current   = isAddingEvent;   }, [isAddingEvent]);
+  useEffect(() => { mapSelectModeRef.current   = mapSelectMode;   }, [mapSelectMode]);
+  useEffect(() => { activeEventTypeRef.current = activeEventType; }, [activeEventType]);
+  useEffect(() => { onPoiClickRef.current      = onPoiClick;      }, [onPoiClick]);
+
+  // ─── Map initialization ─────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Inject animation CSS once
     if (!document.getElementById("r2g-map-style")) {
-      const style = document.createElement("style");
-      style.id = "r2g-map-style";
-      style.textContent = ANIM_STYLE;
-      document.head.appendChild(style);
+      const s = document.createElement("style");
+      s.id = "r2g-map-style";
+      s.textContent = ANIM_STYLE;
+      document.head.appendChild(s);
     }
 
     const map = L.map(containerRef.current, {
@@ -257,123 +312,198 @@ export function TripMap({ events, destination }: TripMapProps) {
       maxZoom: 19,
     }).addTo(map);
 
+    // Pause tour only on user-initiated interaction (not programmatic flyTo)
+    map.on("dragstart zoomstart", () => {
+      if (tourActiveRef.current && !isProgrammaticRef.current) stopTour();
+    });
+
     const allMarkerCoords: [number, number][] = [];
+    const tourSteps: TourStep[] = [];
+    const eventCoords = new Map<string, [number, number]>();
+    const poiMarkersRef: L.Marker[] = [];
 
     (async () => {
-      // 1. Geocode destination for POIs
-      const destCoords = await geocode(destination.split(",")[0].trim());
+      const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-      // 2. Process events
-      const sortedEvents = [...events].sort((a, b) => a.date.localeCompare(b.date));
-      const transportPoints: Array<{ from: [number, number]; to: [number, number]; emoji: string; label: string }> = [];
+      // 1. Geocode destination
+      const destCity = destination.split(",")[0].trim();
+      const destCoords = await geocode(destCity);
 
-      // Delay between Nominatim requests to respect rate limit
-      let delay = 0;
-      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+      // 2. Process events in chronological order
+      const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
 
-      for (const event of sortedEvents) {
+      for (const event of sorted) {
         const { emoji, bg } = getEventEmoji(event);
 
         if (event.type === "transport") {
           const td = (event as any).transportData ?? {};
-          const depQuery = td.departureLocation;
-          const arrQuery = td.arrivalLocation;
+          if (td.departureLocation && td.arrivalLocation) {
+            await sleep(300);
+            const from = await geocode(td.departureLocation);
+            await sleep(300);
+            const to   = await geocode(td.arrivalLocation);
 
-          if (depQuery && arrQuery) {
-            await sleep(delay); delay += 300;
-            const from = await geocode(depQuery);
-            await sleep(delay); delay += 300;
-            const to = await geocode(arrQuery);
-
-            if (from && to) {
-              transportPoints.push({ from, to, emoji, label: `${td.departureLocation} → ${td.arrivalLocation}` });
-              allMarkerCoords.push(from, to);
-
-              // Departure marker
-              const depIcon = emojiIcon(emoji, "#fff", bg);
-              L.marker(from, { icon: depIcon })
-                .bindPopup(`<b>${emoji} ${event.title}</b><br>Départ: ${td.departureLocation}`)
+            if (from) {
+              allMarkerCoords.push(from);
+              eventCoords.set(event.id, from);
+              tourSteps.push({ coords: from, zoom: 11, label: `Départ — ${td.departureLocation}`, eventId: event.id });
+              L.marker(from, { icon: emojiIcon(emoji, bg) })
+                .bindPopup(`<b>${emoji} ${event.title}</b><br>Départ : ${td.departureLocation}`)
                 .addTo(map);
-
-              // Arrival marker (slightly different)
-              const arrIcon = emojiIcon("🎯", "#fff", "#16a34a");
-              L.marker(to, { icon: arrIcon })
+            }
+            if (to) {
+              allMarkerCoords.push(to);
+              tourSteps.push({ coords: to, zoom: 11, label: `Arrivée — ${td.arrivalLocation}`, eventId: event.id });
+              L.marker(to, { icon: emojiIcon("🎯", "#16a34a") })
                 .bindPopup(`<b>Arrivée</b><br>${td.arrivalLocation}`)
                 .addTo(map);
+            }
+            if (from && to) {
+              const pts = interpolateGreatCircle(from, to, 12);
+              L.polyline(pts, { color: "#2563eb", weight: 3, opacity: 0.85, className: "animated-route" }).addTo(map);
             }
           }
           continue;
         }
 
-        // Non-transport events: use known coords or geocode
         let coords = extractKnownCoords(event);
         if (!coords) {
           const q = buildGeoQuery(event);
-          if (q) {
-            await sleep(delay); delay += 300;
-            coords = await geocode(q);
-          }
+          if (q) { await sleep(300); coords = await geocode(q); }
         }
 
         if (coords) {
           allMarkerCoords.push(coords);
-          const icon = emojiIcon(emoji, "#fff", bg);
-          const popupTitle = event.title.replace(/^[^\s]+\s/, "");
-          L.marker(coords, { icon })
-            .bindPopup(`<b>${emoji} ${popupTitle}</b>${event.location ? `<br>${event.location}` : ""}`)
+          eventCoords.set(event.id, coords);
+          const zoomLvl = (event.type === "logement" || event.type === "restauration" || event.type === "activite") ? 15 : 13;
+          tourSteps.push({ coords, zoom: zoomLvl, label: event.title, eventId: event.id });
+          const label = (event.title || "").replace(/^[^\s]+\s/, "");
+          L.marker(coords, { icon: emojiIcon(emoji, bg) })
+            .bindPopup(`<b>${emoji} ${label}</b>${event.location ? `<br>${event.location}` : ""}`)
             .addTo(map);
         }
       }
 
-      // 3. Draw animated transport routes
-      for (const route of transportPoints) {
-        // Curved great-circle approximation using intermediate points
-        const pts = interpolateGreatCircle(route.from, route.to, 12);
-        L.polyline(pts, {
-          color: "#2563eb",
-          weight: 3,
-          opacity: 0.85,
-          className: "animated-route",
-        }).addTo(map);
-      }
-
-      // 4. Fetch POIs around destination
+      // 3. Fetch POIs
       const center = destCoords ?? allMarkerCoords[0] ?? null;
       if (center) {
         const pois = await fetchPOIs(center[0], center[1]);
-        for (const poi of pois) {
-          L.marker([poi.lat, poi.lon], { icon: poiIcon(poi.emoji), opacity: 0.75 })
-            .bindPopup(`<b>${poi.emoji} ${poi.name}</b><br><i>Point d'intérêt</i>`)
-            .addTo(map);
+
+        // Add destination to tour if no events
+        if (tourSteps.length === 0) {
+          tourSteps.push({ coords: center, zoom: 13, label: destCity });
+          allMarkerCoords.push(center);
+          // Add POI waypoints for cinematic tour
+          for (const p of pois.slice(0, 5)) {
+            tourSteps.push({ coords: [p.lat, p.lon], zoom: 15, label: p.name });
+          }
         }
-        if (allMarkerCoords.length === 0) allMarkerCoords.push(center);
+
+        for (const poi of pois) {
+          const marker = L.marker([poi.lat, poi.lon], {
+            icon: poiIcon(poi.emoji),
+            opacity: 0.85,
+          });
+
+          // Always bind popup for browse mode
+          marker.bindPopup(`<b>${poi.emoji} ${poi.name}</b><br><i>Point d'intérêt</i>`);
+
+          // Dynamic click handler: reads current refs at click time
+          marker.on("click", (e) => {
+            if ((isAddingEventRef.current || mapSelectModeRef.current) && onPoiClickRef.current) {
+              L.DomEvent.stopPropagation(e);
+              onPoiClickRef.current({
+                name: poi.name,
+                lat: poi.lat,
+                lon: poi.lon,
+                emoji: poi.emoji,
+                tags: poi.tags,
+              });
+            }
+            // else: Leaflet opens the popup automatically via bindPopup
+          });
+
+          marker.addTo(map);
+          poiMarkersRef.push(marker);
+        }
       }
 
-      // 5. Fit map bounds
+      // 4. Fit bounds
       if (allMarkerCoords.length > 0) {
-        const bounds = L.latLngBounds(allMarkerCoords.map(c => L.latLng(c[0], c[1])));
-        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 14 });
+        map.fitBounds(L.latLngBounds(allMarkerCoords.map(c => L.latLng(c[0], c[1]))), {
+          padding: [36, 36], maxZoom: 14,
+        });
       } else {
-        map.setView([46.5, 2.3], 5); // France
+        map.setView([46.5, 2.3], 5);
       }
+
+      // 5. Store tour data and start
+      tourStepsRef.current = tourSteps;
+      eventCoordsRef.current = eventCoords;
+      mapReadyRef.current = true;
+
+      // Define advance function (closure over `map`)
+      advanceFnRef.current = () => {
+        if (!tourActiveRef.current || !mapRef.current) return;
+        const steps = tourStepsRef.current;
+        if (steps.length === 0) return;
+        const idx = tourIndexRef.current % steps.length;
+        const step = steps[idx];
+        // Mark as programmatic so zoomstart/dragstart don't pause the tour
+        isProgrammaticRef.current = true;
+        mapRef.current.once("moveend", () => { isProgrammaticRef.current = false; });
+        mapRef.current.flyTo(step.coords, step.zoom, { duration: 2.2, easeLinearity: 0.3 });
+        tourIndexRef.current = (idx + 1) % steps.length;
+        tourTimerRef.current = setTimeout(advanceFnRef.current, 4500);
+      };
 
       setLoading(false);
+
+      // Auto-start tour after a brief pause
+      if (tourSteps.length >= 2) {
+        tourTimerRef.current = setTimeout(() => {
+          tourActiveRef.current = true;
+          setTourPaused(false);
+          advanceFnRef.current();
+        }, 2000);
+      }
     })();
 
     return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      tourActiveRef.current = false;
+      if (tourTimerRef.current) clearTimeout(tourTimerRef.current);
+      mapReadyRef.current = false;
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ─── React to focusedEventId changes ─────────────────────────────────────
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current) return;
+    if (focusedEventId) {
+      const coords = eventCoordsRef.current.get(focusedEventId);
+      if (coords) {
+        stopTour();
+        isProgrammaticRef.current = true;
+        mapRef.current.once("moveend", () => { isProgrammaticRef.current = false; });
+        mapRef.current.flyTo(coords, 14, { duration: 1.5, easeLinearity: 0.4 });
+      }
+    } else {
+      // Unfocused → restart tour
+      if (!tourActiveRef.current && mapReadyRef.current) {
+        startTour(tourIndexRef.current);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedEventId]);
+
   return (
-    <div className="relative rounded-2xl overflow-hidden" style={{ height: 260 }}>
+    <div className="relative isolate rounded-2xl overflow-hidden shadow-lg" style={{ height: 280 }}>
+      {/* Loading overlay */}
       {loading && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/20 backdrop-blur-sm rounded-2xl">
-          <div className="flex items-center gap-2 text-white text-sm font-medium">
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-primary/30 backdrop-blur-sm rounded-2xl">
+          <div className="flex items-center gap-2 text-white text-sm font-medium bg-black/30 px-4 py-2 rounded-full">
             <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="60" strokeDashoffset="20" />
             </svg>
@@ -381,20 +511,53 @@ export function TripMap({ events, destination }: TripMapProps) {
           </div>
         </div>
       )}
+
+      {/* Map */}
       <div ref={containerRef} className="w-full h-full" />
+
+      {/* Map select mode — full interactive hint */}
+      {!loading && mapSelectMode && (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-primary text-white text-xs font-bold px-4 py-2 rounded-full shadow-xl animate-pulse">
+            👆 Touchez un point d'intérêt pour le sélectionner
+          </div>
+          <div className="absolute inset-0 ring-4 ring-primary/40 rounded-2xl" />
+        </div>
+      )}
+
+      {/* Adding-event hint banner (modal still open) */}
+      {!loading && isAddingEvent && !mapSelectMode && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-primary/90 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg pointer-events-none">
+          Ouvrez le formulaire puis "Choisir sur la carte"
+        </div>
+      )}
+
+      {/* Relancer le scénario button */}
+      {!loading && tourPaused && !isAddingEvent && (
+        <button
+          onClick={() => startTour(tourIndexRef.current)}
+          className="absolute bottom-8 right-2 z-20 flex items-center gap-1.5 bg-white/90 hover:bg-white text-primary text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-white/50 transition-all hover:shadow-lg"
+          title="Relancer le scénario de la carte"
+        >
+          <Play className="w-3 h-3 fill-current" />
+          Relancer
+        </button>
+      )}
     </div>
   );
 }
 
-// ─── Great-circle interpolation (curved route) ────────────────────────────────
+// ─── Great-circle interpolation ───────────────────────────────────────────────
 function interpolateGreatCircle(from: [number, number], to: [number, number], steps: number): [number, number][] {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const toDeg = (r: number) => (r * 180) / Math.PI;
   const [lat1, lon1] = from.map(toRad);
   const [lat2, lon2] = to.map(toRad);
-  const d = 2 * Math.asin(Math.sqrt(Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2));
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2
+  ));
   if (d === 0) return [from, to];
-  const points: [number, number][] = [];
+  const pts: [number, number][] = [];
   for (let i = 0; i <= steps; i++) {
     const f = i / steps;
     const A = Math.sin((1 - f) * d) / Math.sin(d);
@@ -402,7 +565,7 @@ function interpolateGreatCircle(from: [number, number], to: [number, number], st
     const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
     const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
     const z = A * Math.sin(lat1) + B * Math.sin(lat2);
-    points.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))]);
+    pts.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))]);
   }
-  return points;
+  return pts;
 }

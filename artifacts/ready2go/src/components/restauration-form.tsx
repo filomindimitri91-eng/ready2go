@@ -300,6 +300,16 @@ export interface RestaurationSubmitData {
   restaurationData: Record<string, unknown>;
 }
 
+export interface RestaurationInitialVenue {
+  name: string;
+  lat: number;
+  lon: number;
+  address?: string;
+  city?: string;
+  country?: string;
+  tags?: Record<string, string>;
+}
+
 interface Props {
   tripDate: string;
   tripStartDate: string;
@@ -307,6 +317,8 @@ interface Props {
   onSubmit: (data: RestaurationSubmitData) => void;
   isPending: boolean;
   onCancel: () => void;
+  initialVenue?: RestaurationInitialVenue | null;
+  onRequestMapSelect?: () => void;
 }
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -335,9 +347,23 @@ const blank = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel }: Props) {
+export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialVenue, onRequestMapSelect }: Props) {
   const [d, setD] = useState({ ...blank, date: tripDate });
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
+
+  // Pre-fill from POI click on map
+  useEffect(() => {
+    if (!initialVenue) return;
+    setD(prev => ({
+      ...prev,
+      name:      initialVenue.name,
+      address:   initialVenue.address ?? prev.address,
+      city:      initialVenue.city ?? prev.city,
+      country:   initialVenue.country ?? prev.country,
+      latitude:  String(initialVenue.lat),
+      longitude: String(initialVenue.lon),
+    }));
+  }, [initialVenue]);
 
   const handleOsmSelect = (place: RestaurantPlace) => {
     setD(prev => ({
@@ -410,6 +436,15 @@ export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmi
         <>
           {/* Establishment */}
           <Section title="Établissement">
+            {onRequestMapSelect && (
+              <button
+                type="button"
+                onClick={onRequestMapSelect}
+                className="w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded-xl py-2.5 mb-1 transition-colors"
+              >
+                🗺️ Choisir un lieu sur la carte
+              </button>
+            )}
             <RestaurantSearchInput
               value={d.name}
               onChange={set("name")}
