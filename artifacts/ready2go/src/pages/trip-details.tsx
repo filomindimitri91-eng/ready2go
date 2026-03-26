@@ -35,7 +35,7 @@ import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
 import { WeatherWidget } from "@/components/weather-widget";
 import { NavButtons } from "@/components/nav-buttons";
-const logoImg = `${import.meta.env.BASE_URL}logo.png`;
+import logoImg from "@/assets/logo.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes

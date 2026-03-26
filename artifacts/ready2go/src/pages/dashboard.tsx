@@ -15,7 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
 
-const logoImg = `${import.meta.env.BASE_URL}logo.png`;
+import logoImg from "@/assets/logo.png";
 
 // ─── Destination image hook ───────────────────────────────────────────────────
 // Fetches a representative photo from Wikipedia for the given destination.

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { format, parseISO, addDays, isBefore, isAfter } from "date-fns";
+import { format, parseISO, addDays, isBefore, isAfter, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, CalendarClock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface DayForecast {
@@ -11,11 +11,10 @@ interface DayForecast {
   tempMin: number;
 }
 
-interface WeatherData {
-  city: string;
-  days: DayForecast[];
-  isPast: boolean;
-}
+type WeatherResult =
+  | { kind: "ok"; city: string; days: DayForecast[]; isPast: boolean }
+  | { kind: "soon"; city: string; daysUntil: number }
+  | { kind: "unavailable" };
 
 function wmoToEmoji(code: number): string {
   if (code === 0) return "☀️";
@@ -43,6 +42,11 @@ function wmoToLabel(code: number): string {
   return "Orage";
 }
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 async function geocode(destination: string): Promise<{ lat: number; lon: number; name: string } | null> {
   const city = destination.split(",")[0].trim();
   try {
@@ -57,11 +61,6 @@ async function geocode(destination: string): Promise<{ lat: number; lon: number;
   } catch {
     return null;
   }
-}
-
-function parseLocalDate(dateStr: string): Date {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return new Date(y, m - 1, d);
 }
 
 async function fetchDays(
@@ -86,57 +85,65 @@ async function fetchDays(
     if (!time?.length) return null;
     return time.map((date: string, i: number) => ({
       date,
-      code: weathercode[i] ?? 0,
-      tempMax: Math.round(temperature_2m_max[i] ?? 0),
-      tempMin: Math.round(temperature_2m_min[i] ?? 0),
+      code: weathercode?.[i] ?? 0,
+      tempMax: Math.round(temperature_2m_max?.[i] ?? 0),
+      tempMin: Math.round(temperature_2m_min?.[i] ?? 0),
     }));
   } catch {
     return null;
   }
 }
 
-async function fetchWeather(
+async function getWeather(
   lat: number,
   lon: number,
+  name: string,
   startDate: string,
   endDate: string
-): Promise<{ days: DayForecast[]; isPast: boolean } | null> {
+): Promise<WeatherResult> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const yesterday = addDays(today, -1);
+  const archiveLag = addDays(today, -2);
   const maxForecast = addDays(today, 15);
+  const fmt = (d: Date) => format(d, "yyyy-MM-dd");
 
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
 
-  const fmt = (d: Date) => format(d, "yyyy-MM-dd");
-
   if (isAfter(start, maxForecast)) {
-    return null;
+    const daysUntil = differenceInDays(start, maxForecast);
+    return { kind: "soon", city: name, daysUntil };
   }
 
-  const tripIsFullyPast = isBefore(end, today);
-
-  if (tripIsFullyPast) {
+  if (isBefore(end, archiveLag)) {
     const days = await fetchDays(lat, lon, fmt(start), fmt(end), true);
-    if (!days?.length) return null;
-    return { days: days.slice(0, 14), isPast: true };
+    if (days?.length) return { kind: "ok", city: name, days: days.slice(0, 14), isPast: true };
+    return { kind: "unavailable" };
   }
 
   if (isBefore(start, today)) {
+    const clampedPastEnd = isBefore(archiveLag, end) ? archiveLag : end;
+    const clampedFutureStart = today;
+    const clampedFutureEnd = end > maxForecast ? maxForecast : end;
+
     const [pastDays, futureDays] = await Promise.all([
-      fetchDays(lat, lon, fmt(start), fmt(yesterday), true),
-      fetchDays(lat, lon, fmt(today), fmt(end > maxForecast ? maxForecast : end), false),
+      isAfter(clampedPastEnd, start)
+        ? fetchDays(lat, lon, fmt(start), fmt(clampedPastEnd), true)
+        : Promise.resolve([] as DayForecast[]),
+      isBefore(clampedFutureStart, clampedFutureEnd)
+        ? fetchDays(lat, lon, fmt(clampedFutureStart), fmt(clampedFutureEnd), false)
+        : Promise.resolve([] as DayForecast[]),
     ]);
+
     const combined = [...(pastDays ?? []), ...(futureDays ?? [])];
-    if (!combined.length) return null;
-    return { days: combined.slice(0, 14), isPast: false };
+    if (combined.length) return { kind: "ok", city: name, days: combined.slice(0, 14), isPast: false };
+    return { kind: "unavailable" };
   }
 
   const clampedEnd = end > maxForecast ? maxForecast : end;
   const days = await fetchDays(lat, lon, fmt(start), fmt(clampedEnd), false);
-  if (!days?.length) return null;
-  return { days: days.slice(0, 14), isPast: false };
+  if (days?.length) return { kind: "ok", city: name, days: days.slice(0, 14), isPast: false };
+  return { kind: "unavailable" };
 }
 
 interface Props {
@@ -146,22 +153,18 @@ interface Props {
 }
 
 export function WeatherWidget({ destination, startDate, endDate }: Props) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [result, setResult] = useState<WeatherResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [unavailable, setUnavailable] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    setUnavailable(false);
-    setWeather(null);
-
+    setResult(null);
     (async () => {
       const geo = await geocode(destination);
-      if (!geo) { setUnavailable(true); setLoading(false); return; }
-      const result = await fetchWeather(geo.lat, geo.lon, startDate, endDate);
-      if (!result) { setUnavailable(true); setLoading(false); return; }
-      setWeather({ city: geo.name, days: result.days, isPast: result.isPast });
+      if (!geo) { setResult({ kind: "unavailable" }); setLoading(false); return; }
+      const r = await getWeather(geo.lat, geo.lon, geo.name, startDate, endDate);
+      setResult(r);
       setLoading(false);
     })();
   }, [destination, startDate, endDate]);
@@ -175,11 +178,23 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
     );
   }
 
-  if (unavailable || !weather) return null;
+  if (!result || result.kind === "unavailable") return null;
 
-  const summary = weather.days[0];
-  const allMin = Math.min(...weather.days.map(d => d.tempMin));
-  const allMax = Math.max(...weather.days.map(d => d.tempMax));
+  if (result.kind === "soon") {
+    return (
+      <div className="flex items-center gap-2.5 px-4 py-2.5 bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 text-xs text-slate-600">
+        <CalendarClock className="w-4 h-4 text-primary shrink-0" />
+        <span>
+          Météo de <b>{result.city}</b> disponible dans{" "}
+          <b>{result.daysUntil} jour{result.daysUntil > 1 ? "s" : ""}</b>
+        </span>
+      </div>
+    );
+  }
+
+  const summary = result.days[0];
+  const allMin = Math.min(...result.days.map(d => d.tempMin));
+  const allMax = Math.max(...result.days.map(d => d.tempMax));
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 overflow-hidden">
@@ -189,21 +204,23 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
       >
         <span className="text-xl leading-none">{wmoToEmoji(summary.code)}</span>
         <div className="flex-1 min-w-0">
-          <span className="text-xs font-semibold text-slate-700 truncate">{weather.city}</span>
+          <span className="text-xs font-semibold text-slate-700 truncate">{result.city}</span>
           <span className="text-xs text-muted-foreground ml-2">
             {allMin}° – {allMax}°C
           </span>
-          {weather.days.length > 1 && (
+          {result.days.length > 1 && (
             <span className="text-xs text-muted-foreground ml-2">
-              · {weather.days.length} jour{weather.days.length > 1 ? "s" : ""}
+              · {result.days.length} jour{result.days.length > 1 ? "s" : ""}
             </span>
           )}
         </div>
         <span className="text-[10px] text-muted-foreground font-medium hidden sm:block">
           {wmoToLabel(summary.code)}
         </span>
-        {weather.isPast && (
-          <span className="text-[10px] text-amber-500 font-semibold hidden sm:block">Historique</span>
+        {result.isPast && (
+          <span className="text-[10px] text-amber-500 font-semibold px-1.5 py-0.5 bg-amber-50 rounded-lg hidden sm:block">
+            Historique
+          </span>
         )}
         <span className="ml-auto text-muted-foreground shrink-0">
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -222,7 +239,7 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
           >
             <div className="px-3 pb-3 overflow-x-auto">
               <div className="flex gap-2 w-max">
-                {weather.days.map((day) => {
+                {result.days.map((day) => {
                   const d = parseISO(day.date);
                   const isToday = format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
                   return (
@@ -245,9 +262,9 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
                 })}
               </div>
             </div>
-            <div className="flex items-center gap-1 px-4 pb-2.5">
+            <div className="px-4 pb-2.5">
               <span className="text-[9px] text-muted-foreground/60">
-                Source : Open-Meteo{weather.isPast ? " · Données historiques" : ""}
+                Source : Open-Meteo{result.isPast ? " · Données historiques" : ""}
               </span>
             </div>
           </motion.div>
