@@ -119,29 +119,33 @@ router.post("/ai/generate-program", async (req, res) => {
       ? existingEvents.map(e => `- ${e.date} ${e.startTime ?? "?"}: [${e.type}] ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("\n")
       : "Aucun événement existant.";
 
-    const prompt = `Tu es un expert en planification de voyages. Génère un programme de voyage complet et cohérent pour une destination "${destination}" du ${startDate} au ${endDate}.
+    const prompt = `Tu es un expert en planification de voyages avec une connaissance approfondie des meilleures adresses mondiales. Génère un programme de voyage COMPLET et COHÉRENT pour "${destination}" du ${startDate} au ${endDate}.
 
-ÉVÉNEMENTS DÉJÀ PLANIFIÉS (ne pas modifier, ne pas en créer qui chevauchent ces créneaux) :
+ÉVÉNEMENTS DÉJÀ PLANIFIÉS (ne pas toucher, ne pas chevaucher) :
 ${existingSummary}
 
-RÈGLES STRICTES :
-1. Ne génère QUE des événements pour les créneaux LIBRES (pas de chevauchement avec les existants)
-2. Respecte les distances géographiques et les temps de trajet réalistes
-3. Inclus des pauses repas (restauration), des activités touristiques, et des déplacements logiques
-4. Adapte le programme à la destination et à la culture locale
-5. Chaque journée doit être réaliste (6h-22h max, avec pauses)
-6. Réponds UNIQUEMENT en JSON valide, sans markdown, sans explication
+RÈGLES ABSOLUES :
+1. Ne génère QUE des événements pour les créneaux LIBRES — aucun chevauchement avec les existants
+2. Utilise des NOMS RÉELS d'établissements connus et bien notés à ${destination} : restaurants réputés, musées incontournables, attractions populaires — PAS de noms génériques
+3. Respecte les distances géographiques : deux lieux consécutifs doivent être à distance raisonnable (max 30 min de trajet), ajoute un transport si nécessaire
+4. Chaque journée : réveil réaliste (9h-10h min), déjeuner (~12h-14h), dîner (~19h-21h), pas d'événement après 23h
+5. Équilibre : 1 repas local typique, 1-2 activités culturelles/touristiques par jour selon la durée
+6. Indique toujours une adresse précise dans "location"
+7. Pour les restaurants et activités, inclus un avis type TripAdvisor/Google Maps (note et brève description)
+8. Réponds UNIQUEMENT en JSON valide, sans markdown
 
-FORMAT JSON ATTENDU (tableau d'événements) :
+FORMAT JSON ATTENDU :
 [
   {
-    "type": "activite" | "transport" | "logement" | "restauration" | "autre",
-    "title": "Nom de l'événement",
+    "type": "activite" | "transport" | "restauration" | "autre",
+    "title": "Nom réel du lieu (ex: Le Jules Verne, Musée d'Orsay)",
     "date": "YYYY-MM-DD",
     "startTime": "HH:MM",
     "endTime": "HH:MM",
-    "location": "Adresse ou lieu précis",
-    "notes": "Description ou infos utiles"
+    "location": "Adresse complète précise",
+    "rating": "4.5/5",
+    "reviewSource": "TripAdvisor" | "Google Maps" | "Michelin",
+    "notes": "Description du lieu : cuisine, ambiance, conseil de réservation, etc."
   }
 ]`;
 

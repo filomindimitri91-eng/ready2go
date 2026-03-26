@@ -1102,7 +1102,7 @@ export default function TripDetails() {
             { id: "program",  emoji: "📅", label: "Programme" },
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
-            { id: "deplacer", emoji: "🚌", label: "Déplacer" },
+            { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
             <button
@@ -1128,6 +1128,64 @@ export default function TripDetails() {
         >
           {activeTab === "program" ? (
             <div className="space-y-8">
+              {/* IA Programme Generator */}
+              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sm">✨ Générer un programme IA</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Complète les créneaux libres avec des lieux réels et bien notés</p>
+                  </div>
+                  <button
+                    onClick={generateProgram}
+                    disabled={programGenLoading}
+                    className="shrink-0 flex items-center gap-2 text-xs font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {programGenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "🪄"}
+                    {programGenLoading ? "Génération…" : "Générer"}
+                  </button>
+                </div>
+                {programGenError && <p className="text-xs text-red-500 px-4 py-2">{programGenError}</p>}
+                {programGenEvents && programGenEvents.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-4 py-3">Aucune suggestion — le programme semble déjà complet !</p>
+                )}
+                {programGenEvents && programGenEvents.length > 0 && (
+                  <div className="divide-y divide-border/40">
+                    {(() => {
+                      const typeEmoji: Record<string, string> = { activite: "🎭", transport: "✈️", logement: "🏨", restauration: "🍽️", reunion: "👥", autre: "📌" };
+                      return programGenEvents.map((ev, i) => {
+                        const added = programGenAdded.has(i);
+                        return (
+                          <div key={i} className={cn("flex items-start gap-3 px-4 py-3 transition-colors", added ? "opacity-50" : "")}>
+                            <span className="text-lg">{typeEmoji[ev.type] ?? "📌"}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">{ev.title}</p>
+                              <p className="text-xs text-muted-foreground">{ev.date}{ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ""}` : ""}</p>
+                              {ev.location && <p className="text-xs text-muted-foreground truncate">📍 {ev.location}</p>}
+                              {ev.rating && <p className="text-xs text-amber-600 font-medium">⭐ {ev.rating} · {ev.reviewSource ?? "Avis voyageurs"}</p>}
+                              {ev.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ev.notes}</p>}
+                            </div>
+                            <button
+                              onClick={() => addGeneratedEvent(ev, i)}
+                              disabled={added}
+                              className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
+                            >
+                              {added ? "✓ Ajouté" : "+ Ajouter"}
+                            </button>
+                          </div>
+                        );
+                      });
+                    })()}
+                    <div className="px-4 py-2 flex items-center justify-between">
+                      <button
+                        onClick={() => { programGenEvents.forEach((ev, i) => { if (!programGenAdded.has(i)) addGeneratedEvent(ev, i); }); }}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >Tout ajouter</button>
+                      <button onClick={() => setProgramGenEvents(null)} className="text-xs text-muted-foreground hover:underline">Fermer</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {sortedDates.length === 0 ? (
                 <div className="text-center py-16 bg-card border border-dashed rounded-3xl">
                   <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1329,75 +1387,7 @@ export default function TripDetails() {
             <DeplacerTab destination={trip.destination} />
 
           ) : (
-            /* Assistant tab — program generator + AI chat */
-            <div className="space-y-5">
-              {/* Program generator */}
-              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-sm">✨ Générer un programme</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">L'IA complète les créneaux libres sans toucher aux événements existants</p>
-                  </div>
-                  <button
-                    onClick={generateProgram}
-                    disabled={programGenLoading}
-                    className="shrink-0 flex items-center gap-2 text-xs font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {programGenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "🪄"}
-                    {programGenLoading ? "Génération…" : "Générer"}
-                  </button>
-                </div>
-
-                {programGenError && (
-                  <p className="text-xs text-red-500 px-4 py-2">{programGenError}</p>
-                )}
-
-                {programGenEvents && programGenEvents.length === 0 && (
-                  <p className="text-xs text-muted-foreground px-4 py-3">Aucune suggestion générée — le programme semble déjà complet !</p>
-                )}
-
-                {programGenEvents && programGenEvents.length > 0 && (
-                  <div className="divide-y divide-border/40">
-                    {(() => {
-                      const typeEmoji: Record<string, string> = { activite: "🎭", transport: "✈️", logement: "🏨", restauration: "🍽️", reunion: "👥", autre: "📌" };
-                      return programGenEvents.map((ev, i) => {
-                      const added = programGenAdded.has(i);
-                      return (
-                        <div key={i} className={cn("flex items-start gap-3 px-4 py-3 transition-colors", added ? "opacity-50" : "")}>
-                          <span className="text-lg">{typeEmoji[ev.type] ?? "📌"}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold truncate">{ev.title}</p>
-                            <p className="text-xs text-muted-foreground">{ev.date}{ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ""}` : ""}</p>
-                            {ev.location && <p className="text-xs text-muted-foreground truncate">📍 {ev.location}</p>}
-                          </div>
-                          <button
-                            onClick={() => addGeneratedEvent(ev, i)}
-                            disabled={added}
-                            className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
-                          >
-                            {added ? "✓ Ajouté" : "+ Ajouter"}
-                          </button>
-                        </div>
-                      );
-                    });
-                    })()}
-                    <div className="px-4 py-2">
-                      <button
-                        onClick={() => {
-                          programGenEvents.forEach((ev, i) => { if (!programGenAdded.has(i)) addGeneratedEvent(ev, i); });
-                        }}
-                        className="text-xs font-semibold text-primary hover:underline"
-                      >
-                        Tout ajouter au programme
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* AI chat */}
-              <TripHelp destination={trip.destination} apiBase="" />
-            </div>
+            <TripHelp destination={trip.destination} apiBase="" />
           )}
         </motion.div>
       </main>
