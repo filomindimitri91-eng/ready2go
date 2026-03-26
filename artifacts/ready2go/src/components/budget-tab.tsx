@@ -16,13 +16,15 @@ interface EventItem {
   extraData?: Record<string, unknown>;
 }
 
+type FreeFor = "none" | "all" | "children";
+
 interface EventCostRow {
   key: string;
   type: string;
   title: string;
   price: number;
   hasPrice: boolean;
-  isFree: boolean;
+  freeFor: FreeFor;
   priceType: string;
   ticketType: string;
   priceMode: string;
@@ -35,7 +37,8 @@ interface Props {
   startDate: string;
   endDate: string;
   events: EventItem[];
-  travelers: number;
+  adults: number;
+  children: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -62,12 +65,13 @@ function rowKey(e: EventItem, idx: number) {
   return `${e.type}__${e.title}__${idx}`;
 }
 
-function calcRowTotal(row: EventCostRow, travelers: number): number {
-  if (row.isFree || !row.hasPrice) return 0;
+function calcRowTotal(row: EventCostRow, adults: number, children: number): number {
+  if (row.freeFor === "all" || !row.hasPrice) return 0;
   const ticketFactor = row.ticketType === "aller_retour" ? 2 : 1;
   const nightsFactor = row.priceMode === "per_night" && row.nights > 1 ? row.nights : 1;
   if (row.priceType === "per_group") return row.price * ticketFactor * nightsFactor;
-  return row.price * travelers * ticketFactor * nightsFactor;
+  const paying = row.freeFor === "children" ? adults : adults + children;
+  return row.price * paying * ticketFactor * nightsFactor;
 }
 
 function makeRowFromEvent(e: EventItem, idx: number): EventCostRow {
@@ -78,7 +82,7 @@ function makeRowFromEvent(e: EventItem, idx: number): EventCostRow {
     title: e.title,
     price: e.pricePerPerson ?? 0,
     hasPrice: e.pricePerPerson !== null && e.pricePerPerson !== undefined,
-    isFree: e.pricePerPerson === 0,
+    freeFor: e.pricePerPerson === 0 ? "all" : "none",
     priceType: e.priceType ?? "per_person",
     ticketType: (extra.ticketType as string) ?? "aller_simple",
     priceMode: (extra.priceMode as string) ?? "per_stay",
@@ -95,12 +99,10 @@ function mergeWithStored(
   return fresh.map(row => {
     const s = storedMap.get(row.key);
     if (!s) return row;
-    // Accept stored override only for manually editable fields
     return {
       ...row,
       price: s.price,
-      isFree: s.isFree,
-      // Keep fresh extraData-derived fields (ticketType, priceMode, nights)
+      freeFor: (s.freeFor ?? (s as unknown as { isFree?: boolean }).isFree ? "all" : "none") as FreeFor,
     };
   });
 }
@@ -108,15 +110,42 @@ function mergeWithStored(
 // ── EventRow ──────────────────────────────────────────────────────────────────
 
 function EventRow({
-  row, travelers, onChange, currency,
+  row, adults, children, onChange, currency,
 }: {
   row: EventCostRow;
-  travelers: number;
+  adults: number;
+  children: number;
   onChange: (patch: Partial<EventCostRow>) => void;
   currency: string;
 }) {
-  const total = calcRowTotal(row, travelers);
+  const travelers = adults + children;
+  const total = calcRowTotal(row, adults, children);
   const isPerGroup = row.priceType === "per_group";
+  const paying = row.freeFor === "children" ? adults : travelers;
+
+  const freeOptions: { value: FreeFor; label: string; cls: string }[] = [
+    {
+      value: "none",
+      label: "Payant",
+      cls: row.freeFor === "none"
+        ? "border-primary bg-primary/10 text-primary font-bold"
+        : "border-border bg-background text-muted-foreground hover:border-primary/40",
+    },
+    ...(children > 0 ? [{
+      value: "children" as FreeFor,
+      label: "Enfants gratuits",
+      cls: row.freeFor === "children"
+        ? "border-violet-500 bg-violet-50 text-violet-700 font-bold"
+        : "border-border bg-background text-muted-foreground hover:border-violet-300",
+    }] : []),
+    {
+      value: "all",
+      label: "Tout gratuit",
+      cls: row.freeFor === "all"
+        ? "border-green-500 bg-green-50 text-green-700 font-bold"
+        : "border-border bg-background text-muted-foreground hover:border-green-400",
+    },
+  ];
 
   return (
     <div className="bg-card border border-border/50 rounded-xl px-3.5 py-3 space-y-2">
@@ -128,70 +157,78 @@ function EventRow({
             <p className="text-sm font-semibold truncate">{row.title}</p>
           </div>
           <div className="flex flex-wrap gap-1 mt-1">
-            {row.priceType && (
+            {row.priceType && row.freeFor !== "all" && (
               <span className="text-[10px] bg-primary/8 text-primary rounded-md px-1.5 py-0.5 font-medium">
                 {PRICE_TYPE_LABEL[row.priceType] ?? row.priceType}
               </span>
             )}
-            {row.ticketType === "aller_retour" && (
+            {row.ticketType === "aller_retour" && row.freeFor !== "all" && (
               <span className="text-[10px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">A/R ×2</span>
             )}
-            {row.priceMode === "per_night" && row.nights > 1 && (
+            {row.priceMode === "per_night" && row.nights > 1 && row.freeFor !== "all" && (
               <span className="text-[10px] bg-muted/60 text-muted-foreground rounded-md px-1.5 py-0.5">{row.nights} nuits</span>
             )}
-            {!row.hasPrice && !row.isFree && (
+            {row.freeFor === "children" && children > 0 && (
+              <span className="text-[10px] bg-violet-50 text-violet-600 border border-violet-200 rounded-md px-1.5 py-0.5">
+                {children} enfant{children > 1 ? "s" : ""} gratuit{children > 1 ? "s" : ""}
+              </span>
+            )}
+            {!row.hasPrice && row.freeFor !== "all" && (
               <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 rounded-md px-1.5 py-0.5">Prix à renseigner</span>
             )}
           </div>
         </div>
         <span className={`text-sm font-bold shrink-0 ${total > 0 ? "text-primary" : "text-muted-foreground"}`}>
-          {row.isFree ? "Gratuit" : row.hasPrice ? fmt(total, currency) : "—"}
+          {row.freeFor === "all" ? "Gratuit" : row.hasPrice ? fmt(total, currency) : "—"}
         </span>
       </div>
 
-      {/* Price edit row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={() => onChange({ isFree: !row.isFree, hasPrice: true })}
-          className={`shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-            row.isFree
-              ? "border-green-500 bg-green-50 text-green-700"
-              : "border-border bg-background text-muted-foreground hover:border-green-400"
-          }`}
-        >
-          {row.isFree ? "✓ Gratuit" : "Gratuit ?"}
-        </button>
-
-        {!row.isFree && (
-          <>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={row.price || ""}
-              placeholder="0"
-              onChange={e => onChange({ price: Math.max(0, parseFloat(e.target.value) || 0), hasPrice: true })}
-              className="w-20 text-right text-xs font-bold border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <span className="text-[10px] text-muted-foreground">{currency}</span>
-            <span className="text-[10px] text-muted-foreground">
-              {isPerGroup
-                ? "forfait groupe"
-                : `× ${travelers} voyageur${travelers > 1 ? "s" : ""}`}
-              {row.ticketType === "aller_retour" ? " × 2" : ""}
-              {row.priceMode === "per_night" && row.nights > 1 ? ` × ${row.nights} nuits` : ""}
-            </span>
-          </>
-        )}
+      {/* Free-for selector */}
+      <div className="flex items-center gap-1 flex-wrap">
+        {freeOptions.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange({ freeFor: opt.value, hasPrice: opt.value === "all" ? true : row.hasPrice })}
+            className={`px-2 py-1 rounded-lg text-[10px] border transition-all ${opt.cls}`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
+
+      {/* Price input row */}
+      {row.freeFor !== "all" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={row.price || ""}
+            placeholder="0"
+            onChange={e => onChange({ price: Math.max(0, parseFloat(e.target.value) || 0), hasPrice: true })}
+            className="w-20 text-right text-xs font-bold border border-border rounded-lg px-2 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <span className="text-[10px] text-muted-foreground">{currency}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {isPerGroup
+              ? "forfait groupe"
+              : row.freeFor === "children"
+                ? `× ${adults} adulte${adults > 1 ? "s" : ""} (enfants gratuits)`
+                : `× ${paying} voyageur${paying > 1 ? "s" : ""}`}
+            {row.ticketType === "aller_retour" ? " × 2" : ""}
+            {row.priceMode === "per_night" && row.nights > 1 ? ` × ${row.nights} nuits` : ""}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── BudgetTab ─────────────────────────────────────────────────────────────────
 
-export function BudgetTab({ tripId, events, travelers }: Props) {
+export function BudgetTab({ tripId, events, adults, children }: Props) {
+  const travelers = adults + children;
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [showConverter, setShowConverter] = useState(false);
   const [chartType, setChartType] = useState<"pie" | "bar">("pie");
@@ -244,8 +281,8 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
 
   // Totals
   const grandTotal = useMemo(
-    () => eventRows.reduce((s, row) => s + calcRowTotal(row, travelers), 0),
-    [eventRows, travelers]
+    () => eventRows.reduce((s, row) => s + calcRowTotal(row, adults, children), 0),
+    [eventRows, adults, children]
   );
   const perPerson = travelers > 0 ? Math.round(grandTotal / travelers) : 0;
 
@@ -253,7 +290,7 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
   const chartData = useMemo(() => {
     const byType: Record<string, number> = {};
     eventRows.forEach(row => {
-      const total = calcRowTotal(row, travelers);
+      const total = calcRowTotal(row, adults, children);
       if (total > 0) byType[row.type] = (byType[row.type] ?? 0) + total;
     });
     return Object.entries(byType)
@@ -264,7 +301,7 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
         color: COLORS[Object.keys(EVENT_LABEL).indexOf(type) % COLORS.length] ?? COLORS[0],
       }))
       .sort((a, b) => b.value - a.value);
-  }, [eventRows, travelers]);
+  }, [eventRows, adults, children]);
 
   // Group events by type
   const groupedByType = useMemo(() => {
@@ -272,10 +309,10 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
     eventRows.forEach((row, idx) => {
       if (!groups[row.type]) groups[row.type] = { rows: [], subtotal: 0 };
       groups[row.type].rows.push({ row, idx });
-      groups[row.type].subtotal += calcRowTotal(row, travelers);
+      groups[row.type].subtotal += calcRowTotal(row, adults, children);
     });
     return groups;
-  }, [eventRows, travelers]);
+  }, [eventRows, adults, children]);
 
   const currency = selectedCurrency;
   const hasAnyEvents = eventRows.length > 0;
@@ -320,9 +357,10 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
               <div>
                 <p className="text-xs font-semibold text-primary uppercase tracking-wider">Budget total</p>
                 <p className="text-3xl font-bold text-foreground mt-1">{fmt(grandTotal, currency)}</p>
-                <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <p className="text-xs text-muted-foreground">
-                    {travelers} voyageur{travelers > 1 ? "s" : ""}
+                    {adults} adulte{adults > 1 ? "s" : ""}
+                    {children > 0 ? ` + ${children} enfant${children > 1 ? "s" : ""}` : ""}
                   </p>
                   {travelers > 1 && grandTotal > 0 && (
                     <span className="text-xs font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5">
@@ -440,7 +478,8 @@ export function BudgetTab({ tripId, events, travelers }: Props) {
                   <EventRow
                     key={row.key}
                     row={row}
-                    travelers={travelers}
+                    adults={adults}
+                    children={children}
                     onChange={patch => updateRow(idx, patch)}
                     currency={currency}
                   />

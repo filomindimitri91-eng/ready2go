@@ -1484,7 +1484,8 @@ export default function TripDetails() {
                 priceType: e.priceType ?? null,
                 extraData: e.transportData ?? e.logementData ?? undefined,
               })) ?? []}
-              travelers={groupSize + groupChildren}
+              adults={groupSize}
+              children={groupChildren}
             />
 
           ) : activeTab === "deplacer" ? (
