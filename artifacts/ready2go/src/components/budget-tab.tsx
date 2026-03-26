@@ -99,10 +99,13 @@ function mergeWithStored(
   return fresh.map(row => {
     const s = storedMap.get(row.key);
     if (!s) return row;
+    // Restore manually-edited fields; keep fresh structural fields (ticketType, priceMode, nights, priceType)
+    const legacyFree = (s as unknown as { isFree?: boolean }).isFree;
     return {
       ...row,
       price: s.price,
-      freeFor: (s.freeFor ?? (s as unknown as { isFree?: boolean }).isFree ? "all" : "none") as FreeFor,
+      hasPrice: s.hasPrice ?? row.hasPrice,
+      freeFor: s.freeFor ?? (legacyFree ? "all" : "none") as FreeFor,
     };
   });
 }
