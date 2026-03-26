@@ -28,6 +28,7 @@ import { TransportForm, TransportSubmitData } from "@/components/transport-form"
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
 import { ActiviteForm, ActiviteSubmitData, ACTIVITE_EMOJI, ACTIVITE_LABEL } from "@/components/activite-form";
+import { TripMap } from "@/components/trip-map";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -854,31 +855,38 @@ export default function TripDetails() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <div className="bg-primary text-primary-foreground pt-12 pb-20 px-4 rounded-b-[2.5rem] shadow-xl relative">
+      <div className="bg-primary text-primary-foreground pt-12 pb-6 px-4 rounded-b-[2.5rem] shadow-xl relative">
         <div className="max-w-3xl mx-auto">
           <Link href="/">
-            <button className="flex items-center text-primary-foreground/80 hover:text-white mb-6 transition-colors">
+            <button className="flex items-center text-primary-foreground/80 hover:text-white mb-4 transition-colors">
               <ChevronLeft className="w-5 h-5 mr-1" />
               Retour
             </button>
           </Link>
-          <div className="flex justify-between items-start">
+          <div className="flex justify-between items-start mb-4">
             <div>
-              <h1 className="text-4xl font-extrabold mb-2 leading-tight">{trip.name}</h1>
-              <div className="flex items-center opacity-90 text-lg mb-1">
-                <MapPin className="w-5 h-5 mr-2" />
+              <h1 className="text-3xl font-extrabold mb-1 leading-tight">{trip.name}</h1>
+              <div className="flex items-center opacity-90 text-base mb-0.5">
+                <MapPin className="w-4 h-4 mr-2" />
                 {trip.destination}
               </div>
-              <div className="flex items-center opacity-90">
-                <CalendarDays className="w-5 h-5 mr-2" />
-                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} - {format(parseDateLocal(trip.endDate), "dd MMM yyyy", { locale: fr })}
+              <div className="flex items-center opacity-80 text-sm">
+                <CalendarDays className="w-4 h-4 mr-2" />
+                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "dd MMM yyyy", { locale: fr })}
               </div>
             </div>
           </div>
+
+          {/* Interactive map — key forces re-init when events change */}
+          <TripMap
+            key={(trip.events as any[])?.map((e: any) => e.id).join(",") || "empty"}
+            events={trip.events as any[]}
+            destination={trip.destination}
+          />
         </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 -mt-10 relative z-10">
+      <main className="max-w-3xl mx-auto px-4 mt-6 relative z-10">
         {/* Tabs */}
         <div className="bg-card p-1.5 rounded-2xl shadow-lg border border-border/50 flex mb-8">
           <button
