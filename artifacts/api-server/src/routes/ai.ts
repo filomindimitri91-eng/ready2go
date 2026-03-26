@@ -253,123 +253,51 @@ router.post("/ai/transit", async (req, res) => {
   try {
     const { from, to, city } = req.body as { from: string; to: string; city: string };
 
-    const prompt = `Tu es un expert mondial en transports en commun. Donne l'itinéraire RÉEL et DÉTAILLÉ en transports en commun pour aller de "${from}" à "${to}" dans la ville / région de "${city}".
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from + ", " + city)}&destination=${encodeURIComponent(to + ", " + city)}&travelmode=transit`;
 
-RÈGLES IMPORTANTES :
-- Utilise les VRAIES lignes de transport qui existent à ${city} (numéros de lignes réels, noms d'opérateurs réels : RATP, SNCF, TfL, MTA, BVG, STM, etc.)
-- Donne les VRAIS noms des arrêts et stations du réseau local
-- Indique la direction (terminus) de chaque ligne pour que le voyageur ne se trompe pas
-- Estime la durée de marche entre arrêts et temps d'attente moyen
-- Si le trajet nécessite une correspondance, détaille chaque étape
-- Si la ville n'a pas de transports en commun connus, propose le meilleur moyen disponible (taxi, Uber, etc.)
-- Pour les modes : utilise "metro", "bus", "tram", "rer", "train", "marche", "ferry", "cable", "autre"
-
-Réponds UNIQUEMENT en JSON valide sans markdown :
-{
-  "summary": "Résumé concis (ex: Métro ligne 4 dir. Montrouge → Bus 63, ~28 min)",
-  "totalDuration": "28 min",
-  "steps": [
-    {
-      "mode": "marche",
-      "emoji": "🚶",
-      "line": null,
-      "from": "Rue de départ exacte",
-      "to": "Station / Arrêt le plus proche",
-      "duration": "3 min",
-      "instruction": "Marcher jusqu'à la station Odéon"
-    },
-    {
-      "mode": "metro",
-      "emoji": "🚇",
-      "line": "Ligne 4 — dir. Montrouge",
-      "from": "Odéon",
-      "to": "Saint-Placide",
-      "duration": "4 min",
-      "instruction": "Prendre la ligne 4 direction Montrouge (2 arrêts)"
-    }
-  ],
-  "tips": "Conseil pratique (tarif, zone, fréquence, application mobile de l'opérateur...)",
-  "mapsUrl": "https://www.google.com/maps/dir/?api=1&origin=FROM&destination=TO&travelmode=transit"
-}
-
-Pour mapsUrl, remplace FROM par "${encodeURIComponent(from + ", " + city)}" et TO par "${encodeURIComponent(to + ", " + city)}".`;
+    const prompt = `Propose un itineraire typique en transports en commun de "${from}" a "${to}" a ${city}. Inclus les etapes a pied. Reponds UNIQUEMENT en JSON : {"summary":"...","totalDuration":"...","steps":[{"mode":"metro|bus|tram|rer|train|marche|ferry|autre","emoji":"...","line":"...","from":"...","to":"...","duration":"...","instruction":"..."}],"tips":"..."}`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-5-mini",
-      max_completion_tokens: 1800,
+      max_completion_tokens: 5000,
       messages: [
-        {
-          role: "system",
-          content: `Tu es un expert mondial en transports en commun avec une connaissance exhaustive de tous les réseaux urbains du monde. Tu connais les numéros de lignes réels, les noms des arrêts, les directions (terminus) et les horaires approximatifs.
-
-Réseaux que tu maîtrises (liste non exhaustive) :
-
-FRANCE — Île-de-France : RATP (métro, RER, bus, tramway), SNCF Transilien (lignes H, J, K, L, N, P, R, U). Lyon : TCL (métros A/B/C/D, tramways T1-T8, Funiculaires F1/F2, bus Keolis). Marseille : RTM (métros M1/M2, tramway T1-T3, bus). Bordeaux : TBM (tramways A/B/C/D, bus). Toulouse : Tisséo (métros A/B, Téléo, tramway T1/T2, bus). Lille : Ilévia (VAL, tramway, bus). Nantes : TAN (tramways 1/2/3, Busway, bus). Rennes : STAR (métro ligne a/b, bus). Strasbourg : CTS (tramways A-F, bus). Montpellier : TAM (tramways 1-5, bus). Nice : Lignes d'Azur (tramway T1/T2, bus). Grenoble : TAG (tramways A-E, bus). Rouen : Astuce/TCAR (tramway, bus). Toulon : Mistral Bus. Dijon : Divia. Clermont-Ferrand : T2C. Tours : Fil Bleu. Brest : Bibus. Caen : Twisto. Angers : Irigo. Besançon : Ginko. Saint-Étienne : STAS. Metz : LE MET'. Nancy : Réseau Stan. Orléans : TAO. Amiens : Ametis. Perpignan : Sankéo. Reims : Citura.
-
-OUTRE-MER FRANCE — Guadeloupe : Karulis (bus interurbains), Karu'Bus (réseau urbain Pointe-à-Pitre/Abymes), lignes TP. Martinique : CFTU/Mozaïk (bus, taxi collectifs, vedettes maritimes). La Réunion : Car Jaune (réseau régional), Citalis (réseau urbain), Trans'Îlien. Guyane : SMTCG (Cayenne), bus urbains. Mayotte : M'Tsangamouji (bus).
-
-BELGIQUE : STIB/MIVB Bruxelles (métro, pré-métro, tram, bus), De Lijn (Flandre), TEC (Wallonie), SNCB intercités.
-
-SUISSE : CFF/SBB (trains), TPG Genève (tram, bus), tl Lausanne (métro M1/M2, bus), ZVV Zurich (S-Bahn, tram, bus), BVB Bâle.
-
-LUXEMBOURG : RGTR, CFL (trains), AVL (bus ville), Vel'oh (vélos).
-
-ALLEMAGNE : BVG Berlin (U-Bahn, S-Bahn, tram, bus), MVV Munich (U-Bahn, S-Bahn, tram, bus), HVV Hambourg, VRS Cologne/Bonn, VGF Francfort (U-Bahn, tram), SSB Stuttgart, RMV région Rhin-Main, KVV Karlsruhe, DVB Dresde, LVB Leipzig.
-
-ROYAUME-UNI : TfL Londres (Tube, Overground, Elizabeth line, DLR, bus, River Bus), Lothian Buses Édimbourg, Strathclyde Glasgow (SPT), Transport for Greater Manchester (Metrolink, bus), West Midlands (bus, Metro), First Bus diverses villes.
-
-ESPAGNE : Metro de Madrid, EMT Madrid (bus), TMB Barcelone (métro, bus, tramway), Metro Bilbao, Consorcio Transportes Sevilla, Metro Valencia, Tranvía Tenerife.
-
-ITALIE : ATM Milano (métro M1-M5, tram, bus), ATAC Rome (métro A/B/C, bus, tram), GTT Turin (métro, tram, bus), AMT Gênes, ANM Naples (métro, funiculaires), ACTV Venise (vaporetto, bus).
-
-PAYS-BAS : GVB Amsterdam (tram, métro, bus), RET Rotterdam (métro, tram, bus), HTM La Haye, NS (trains nationaux).
-
-PORTUGAL : Metropolitano Lisboa (métro), Carris (bus, tram, funiculaires), STCP Porto (métro, bus), CP trains.
-
-AUTRICHE : Wiener Linien Vienne (U-Bahn, tram, bus), ÖBB trains.
-
-SCANDINAVIE : SL Stockholm (tunnelbana, pendeltåg, tram, bus), HRT Helsinki (metro, tram, bus), Ruter Oslo (T-bane, tram, bus), Movia Copenhague (métro, S-tog, bus).
-
-ÉTATS-UNIS : MTA New York (subway, bus, LIRR, Metro-North), MBTA Boston (T), CTA Chicago (L, bus), WMATA Washington DC (Metro), BART San Francisco, Muni San Francisco, Metro Los Angeles, Sound Transit Seattle, MARTA Atlanta, DART Dallas, Metro Houston, RTD Denver.
-
-CANADA : STM Montréal (métro, bus), TTC Toronto (subway, streetcar, bus), TransLink Vancouver (SkyTrain, bus, SeaBus), OC Transpo Ottawa, ETS Edmonton, Calgary Transit.
-
-MEXIQUE : Metro CDMX (lignes 1-12), Metrobús, RTP (bus), Tren Ligero.
-
-BRÉSIL : Metro São Paulo (lignes 1-5), CPTM São Paulo, Metro Rio, SuperVia Rio, UrbanoBus.
-
-ARGENTINE : Subte Buenos Aires (lignes A-H), Metrobus, TBA trains.
-
-JAPON : Tokyo Metro (lignes Ginza, Marunouchi, etc.), Toei (Asakusa, Mita, Shinjuku, Oedo), JR East (Yamanote, Chuo, etc.), Osaka Metro, Nagoya Subway, Kyoto Bus/Subway.
-
-CHINE : Shanghai Metro (lignes 1-20+), Beijing Subway, Guangzhou Metro, Shenzhen Metro, Chengdu Metro.
-
-CORÉE DU SUD : Seoul Metro (lignes 1-9, Sinbundang, etc.), Busan Metro, Korail.
-
-SINGAPOUR : SMRT (MRT North-South/East-West/Thomson-East Coast), SBS Transit (Circle/Downtown lines), SBS bus.
-
-HONG KONG : MTR, KMB bus, CTB bus, Star Ferry, Green Minibus.
-
-AUSTRALIE : Transport NSW Sydney (Trains, Metro, Buses, Ferries, Light Rail), PTV Melbourne (tram, metro, bus), TransLink Brisbane.
-
-MOYEN-ORIENT : RTA Dubaï (Metro Red/Green line, Tram, bus), Riyadh Metro, Doha Metro, Tel Aviv Light Rail.
-
-AFRIQUE : STIF Alger (metro, tramway), CAM Le Caire (metro lignes 1/2/3), Gautrain Johannesburg, Rea Vaya Johannesburg (BRT), MyCiTi Cape Town.
-
-Tu réponds UNIQUEMENT en JSON valide, sans markdown ni commentaire.`,
-        },
+        { role: "system", content: "Assistant voyage. JSON uniquement, pas de markdown." },
         { role: "user", content: prompt },
       ],
     });
 
-    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    const choice = completion.choices[0];
+    const raw = choice?.message?.content?.trim() ?? "";
+    console.log("[ai/transit] finish_reason:", choice?.finish_reason, "len:", raw.length, "raw:", raw.slice(0, 300));
+
     let result: any = {};
-    try {
-      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-      result = JSON.parse(cleaned);
-    } catch {
-      result = { summary: "Itinéraire indisponible", steps: [], tips: "", mapsUrl: "" };
+    if (raw) {
+      try {
+        // Strip markdown code fences if present
+        const cleaned = raw
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+        // Find the JSON object boundaries robustly
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start !== -1 && end !== -1) {
+          result = JSON.parse(cleaned.slice(start, end + 1));
+        } else {
+          throw new Error("No JSON object found");
+        }
+      } catch (parseErr) {
+        console.error("[ai/transit] JSON parse error:", (parseErr as Error).message, "raw:", raw.slice(0, 300));
+        result = { summary: "Erreur de format — réessayez.", steps: [], tips: "" };
+      }
+    } else {
+      console.error("[ai/transit] Empty response from model");
+      result = { summary: "Réponse vide du service IA — réessayez.", steps: [], tips: "" };
     }
+
+    // Always inject our pre-computed mapsUrl
+    result.mapsUrl = mapsUrl;
 
     res.json(result);
   } catch (err: any) {
