@@ -339,23 +339,23 @@ function JoinTripModal({ isOpen, onClose, onJoin, isPending, error }: any) {
     <Modal isOpen={isOpen} onClose={onClose} title="Rejoindre un voyage">
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Saisissez le code d'invitation à 6 caractères que l'organisateur vous a partagé.
+          Saisissez le code d'invitation à 8 caractères que l'organisateur vous a partagé.
         </p>
         <div>
           <Label>Code d'invitation</Label>
           <Input 
             required 
-            placeholder="EX: ABCDEF" 
+            placeholder="EX: ABCD1234" 
             value={code}
             onChange={e => setCode(e.target.value.toUpperCase())}
-            maxLength={6}
+            maxLength={8}
             className="uppercase tracking-widest text-center text-xl font-bold"
           />
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="pt-2 flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={isPending || code.length < 3}>
+          <Button type="submit" disabled={isPending || code.length < 8}>
             {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Rejoindre"}
           </Button>
         </div>
