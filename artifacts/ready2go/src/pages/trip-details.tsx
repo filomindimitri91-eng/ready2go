@@ -924,8 +924,7 @@ export default function TripDetails() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
-  const [groupAdults, setGroupAdults] = useState(2);
-  const [groupChildren, setGroupChildren] = useState(0);
+  const [groupSize, setGroupSize] = useState(2);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -1148,35 +1147,19 @@ export default function TripDetails() {
           {/* Composition du groupe */}
           <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
             <span className="text-sm font-semibold text-primary-foreground/80 mr-1">Groupe :</span>
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2 py-1">
-              <span className="text-sm">🧑</span>
+            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-1.5">
               <button
                 type="button"
-                onClick={() => setGroupAdults(a => Math.max(0, a - 1))}
+                onClick={() => setGroupSize(n => Math.max(1, n - 1))}
                 className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
               >−</button>
-              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupAdults}</span>
+              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupSize}</span>
               <button
                 type="button"
-                onClick={() => setGroupAdults(a => Math.min(30, a + 1))}
+                onClick={() => setGroupSize(n => Math.min(50, n + 1))}
                 className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
               >+</button>
-              <span className="text-xs text-primary-foreground/70 ml-0.5">adulte{groupAdults > 1 ? "s" : ""}</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2 py-1">
-              <span className="text-sm">👶</span>
-              <button
-                type="button"
-                onClick={() => setGroupChildren(c => Math.max(0, c - 1))}
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
-              >−</button>
-              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupChildren}</span>
-              <button
-                type="button"
-                onClick={() => setGroupChildren(c => Math.min(20, c + 1))}
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
-              >+</button>
-              <span className="text-xs text-primary-foreground/70 ml-0.5">enfant{groupChildren > 1 ? "s" : ""}</span>
+              <span className="text-xs text-primary-foreground/70 ml-1">voyageur{groupSize > 1 ? "s" : ""}</span>
             </div>
           </div>
         </div>
@@ -1454,8 +1437,7 @@ export default function TripDetails() {
                 priceType: e.priceType ?? null,
                 extraData: e.transportData ?? e.logementData ?? undefined,
               })) ?? []}
-              adults={groupAdults}
-              children={groupChildren}
+              travelers={groupSize}
             />
 
           ) : activeTab === "deplacer" ? (

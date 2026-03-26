@@ -499,8 +499,10 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
               onPriceChange={setPriceInput}
               isFree={isFree}
               onFreeToggle={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
-              priceType={priceType}
+              priceType={tt === "carRental" ? "per_group" : priceType}
               onPriceTypeChange={setPriceType}
+              hideTypeSelector={tt === "carRental"}
+              groupLabel={tt === "carRental" ? "Prix total de la location (pour le groupe)" : undefined}
             />
           </Section>
 

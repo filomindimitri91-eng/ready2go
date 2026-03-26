@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils";
 export const PRICE_TYPES = [
   { value: "per_person", label: "Par personne", emoji: "👤" },
   { value: "per_adult",  label: "Par adulte",   emoji: "🧑" },
-  { value: "per_child",  label: "Par enfant",   emoji: "👶" },
-  { value: "per_couple", label: "Par couple",   emoji: "💑" },
   { value: "per_group",  label: "Par groupe",   emoji: "👥" },
 ];
 
@@ -21,6 +19,8 @@ interface PriceSectionProps {
   priceType: string;
   onPriceTypeChange: (v: string) => void;
   currency?: string;
+  hideTypeSelector?: boolean;
+  groupLabel?: string;
 }
 
 export function PriceSection({
@@ -31,6 +31,8 @@ export function PriceSection({
   priceType,
   onPriceTypeChange,
   currency = "€",
+  hideTypeSelector = false,
+  groupLabel,
 }: PriceSectionProps) {
   return (
     <div className="space-y-3">
@@ -68,24 +70,24 @@ export function PriceSection({
         </div>
       </div>
 
-      {!isFree && (
+      {!isFree && !hideTypeSelector && (
         <div>
-          <Label className="mb-1">Type de tarif</Label>
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+          <Label className="mb-1">{groupLabel ?? "Type de tarif"}</Label>
+          <div className="flex gap-2">
             {PRICE_TYPES.map(t => (
               <button
                 key={t.value}
                 type="button"
                 onClick={() => onPriceTypeChange(t.value)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border-2 transition-all text-center",
+                  "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 px-1 rounded-xl border-2 transition-all text-center",
                   priceType === t.value
                     ? "border-primary bg-primary/5 text-primary"
                     : "border-border bg-background text-muted-foreground hover:border-primary/40"
                 )}
               >
                 <span className="text-base leading-none">{t.emoji}</span>
-                <span className="text-[9px] font-semibold leading-tight">{t.label}</span>
+                <span className="text-[10px] font-semibold leading-tight">{t.label}</span>
               </button>
             ))}
           </div>
