@@ -25,6 +25,15 @@ import {
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
+import { LodgingForm, LodgingSubmitData } from "@/components/lodging-form";
+
+// ─── Timezone-safe date parser ────────────────────────────────────────────────
+// parseISO with date-only strings treats them as UTC midnight, which causes
+// off-by-one display errors in negative-UTC timezones. This constructs a local date.
+function parseDateLocal(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
 
 // ─── Event type meta ──────────────────────────────────────────────────────────
 
@@ -225,6 +234,215 @@ function TransportCard({ event, onDelete }: { event: Event & { transportData?: T
   );
 }
 
+// ─── Lodging card ─────────────────────────────────────────────────────────────
+
+const LODGING_EMOJI: Record<string, string> = {
+  hotel: "🏨", airbnb: "🏠", rental: "🏡",
+  camping: "⛺", hostel: "🛏️", guesthouse: "🏘️", other: "🏢",
+};
+const LODGING_LABEL: Record<string, string> = {
+  hotel: "Hôtel", airbnb: "Airbnb", rental: "Location",
+  camping: "Camping", hostel: "Auberge", guesthouse: "Chambre d'hôtes", other: "Hébergement",
+};
+
+interface LodgingData {
+  lodgingType?: string;
+  name?: string;
+  brand?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  checkInDate?: string;
+  checkInTime?: string;
+  checkOutDate?: string;
+  checkOutTime?: string;
+  bookingProvider?: string;
+  bookingReference?: string;
+  roomType?: string;
+  guestCount?: string | number;
+  hostName?: string;
+  accessCode?: string;
+  accessInstructions?: string;
+  phone?: string;
+  email?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  pitchNumber?: string;
+  vehiclePlate?: string;
+  dormType?: string;
+  bedNumber?: string;
+  breakfastIncluded?: boolean;
+  attachmentName?: string;
+  attachmentUrl?: string;
+  notes?: string;
+}
+
+function LodgingCard({ event, onDelete }: { event: Event & { lodgingData?: LodgingData | null }; onDelete: () => void }) {
+  const ld = event.lodgingData as LodgingData | null | undefined;
+  const meta = EVENT_META.logement;
+  const lt = ld?.lodgingType ?? "";
+  const emoji = LODGING_EMOJI[lt] ?? "🏠";
+  const label = LODGING_LABEL[lt] ?? "Hébergement";
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const fullAddress = [ld?.address, ld?.city, ld?.country].filter(Boolean).join(", ");
+  const mapsUrl = fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null;
+  const wazeUrl = fullAddress ? `https://waze.com/ul?q=${encodeURIComponent(fullAddress)}&navigate=yes` : null;
+
+  return (
+    <Card className={cn("overflow-hidden border-l-4", meta.colorClass.split(" ")[2])}>
+      {/* Header */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl leading-none">{emoji}</span>
+          <span className={cn("text-xs font-semibold uppercase tracking-wider", meta.colorClass.split(" ")[0])}>
+            {label}
+          </span>
+        </div>
+        <button
+          onClick={onDelete}
+          className="text-muted-foreground hover:text-destructive transition-colors p-1"
+          title="Supprimer"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <h4 className="text-base font-bold mb-2">{event.title.replace(/^[^\s]+\s/, "")}</h4>
+
+      {/* Check-in / Check-out */}
+      {(ld?.checkInDate || ld?.checkOutDate) && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {ld?.checkInDate && (
+            <div className="text-sm bg-muted/60 px-2.5 py-1.5 rounded-lg">
+              <div className="text-xs text-muted-foreground mb-0.5">Arrivée</div>
+              <span className="font-medium">{format(parseDateLocal(ld.checkInDate), "dd MMM", { locale: fr })}</span>
+              {ld?.checkInTime && <span className="text-muted-foreground ml-1">{ld.checkInTime}</span>}
+            </div>
+          )}
+          {ld?.checkInDate && ld?.checkOutDate && (
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          )}
+          {ld?.checkOutDate && (
+            <div className="text-sm bg-muted/60 px-2.5 py-1.5 rounded-lg">
+              <div className="text-xs text-muted-foreground mb-0.5">Départ</div>
+              <span className="font-medium">{format(parseDateLocal(ld.checkOutDate), "dd MMM", { locale: fr })}</span>
+              {ld?.checkOutTime && <span className="text-muted-foreground ml-1">{ld.checkOutTime}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Address */}
+      {fullAddress && (
+        <p className="text-sm text-muted-foreground flex items-start gap-1 mb-2">
+          <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+          {fullAddress}
+        </p>
+      )}
+
+      {/* Badges */}
+      <div className="flex flex-wrap gap-2 mt-2">
+        {ld?.bookingProvider && (
+          <span className="text-xs bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-md">{ld.bookingProvider}</span>
+        )}
+        {ld?.bookingReference && (
+          <span className="text-xs bg-secondary/50 text-foreground px-2 py-0.5 rounded-md font-mono">Réf: {ld.bookingReference}</span>
+        )}
+        {ld?.roomType && (
+          <span className="text-xs bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-md">{ld.roomType}</span>
+        )}
+        {ld?.guestCount && (
+          <span className="text-xs bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-md">👥 {ld.guestCount} pers.</span>
+        )}
+        {ld?.breakfastIncluded && (
+          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md">☕ Petit-dej inclus</span>
+        )}
+        {ld?.hostName && (
+          <span className="text-xs bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-md">Hôte: {ld.hostName}</span>
+        )}
+        {ld?.pitchNumber && (
+          <span className="text-xs bg-secondary/50 text-muted-foreground px-2 py-0.5 rounded-md">Empl. {ld.pitchNumber}</span>
+        )}
+      </div>
+
+      {/* Access code */}
+      {ld?.accessCode && (
+        <p className="text-sm mt-2 flex items-center gap-2">
+          <span className="text-muted-foreground">🔑</span>
+          <span className="font-mono font-semibold bg-muted px-2 py-0.5 rounded">{ld.accessCode}</span>
+        </p>
+      )}
+
+      {/* Access instructions */}
+      {ld?.accessInstructions && (
+        <p className="text-sm text-foreground/80 mt-3 bg-secondary/30 p-3 rounded-lg border border-secondary/50 whitespace-pre-line">
+          {ld.accessInstructions}
+        </p>
+      )}
+
+      {/* Notes */}
+      {event.notes && (
+        <p className="text-sm text-foreground/80 mt-3 bg-secondary/30 p-3 rounded-lg border border-secondary/50">
+          {event.notes}
+        </p>
+      )}
+
+      {/* Maps buttons */}
+      {(mapsUrl || wazeUrl) && (
+        <div className="flex gap-2 mt-3 flex-wrap">
+          {mapsUrl && (
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
+              <MapPin className="w-3.5 h-3.5" />
+              Google Maps
+            </a>
+          )}
+          {wazeUrl && (
+            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
+              🚗 Waze
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Attachment */}
+      {ld?.attachmentName && ld?.attachmentUrl && (
+        <div className="mt-3">
+          {ld.attachmentUrl.startsWith("data:image") ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="flex items-center gap-2 text-sm text-primary font-medium hover:underline"
+              >
+                <Paperclip className="w-4 h-4" />
+                {ld.attachmentName}
+              </button>
+              {previewOpen && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <img src={ld.attachmentUrl} alt={ld.attachmentName} className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl" />
+                </div>
+              )}
+            </>
+          ) : (
+            <a href={ld.attachmentUrl} download={ld.attachmentName}
+              className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
+              <Paperclip className="w-4 h-4" />
+              {ld.attachmentName}
+            </a>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ─── Standard event card ──────────────────────────────────────────────────────
 
 function StandardCard({ event, onDelete }: { event: Event; onDelete: () => void }) {
@@ -360,7 +578,7 @@ export default function TripDetails() {
               </div>
               <div className="flex items-center opacity-90">
                 <CalendarDays className="w-5 h-5 mr-2" />
-                {format(parseISO(trip.startDate), "dd MMM", { locale: fr })} - {format(parseISO(trip.endDate), "dd MMM yyyy", { locale: fr })}
+                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} - {format(parseDateLocal(trip.endDate), "dd MMM yyyy", { locale: fr })}
               </div>
             </div>
           </div>
@@ -414,9 +632,9 @@ export default function TripDetails() {
                   <div key={date}>
                     <h3 className="sticky top-16 z-20 py-2 bg-background/95 backdrop-blur-md text-lg font-bold text-foreground border-b border-border/50 mb-4 flex items-center gap-2">
                       <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">
-                        {format(parseISO(date), "dd")}
+                        {format(parseDateLocal(date), "dd")}
                       </span>
-                      {format(parseISO(date), "EEEE d MMMM", { locale: fr })}
+                      {format(parseDateLocal(date), "EEEE d MMMM", { locale: fr })}
                     </h3>
                     <div className="space-y-4 pl-4 border-l-2 border-border/50 ml-4">
                       {groupedEvents[date].map((event) => {
@@ -428,6 +646,11 @@ export default function TripDetails() {
                             <div className={cn("absolute -left-[11px] top-4 w-5 h-5 rounded-full border-4 border-background", colorParts[1], dotBg)} />
                             {event.type === "transport" ? (
                               <TransportCard
+                                event={event as any}
+                                onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                              />
+                            ) : event.type === "logement" ? (
+                              <LodgingCard
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
                               />
@@ -543,6 +766,10 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
     onAdd(data);
   };
 
+  const handleLodgingSubmit = (data: LodgingSubmitData) => {
+    onAdd(data);
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Ajouter au programme">
       {/* Type selector */}
@@ -572,13 +799,22 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
         </div>
       </div>
 
-      {/* Transport form */}
+      {/* Specialised forms */}
       {selectedType === "transport" ? (
         <TransportForm
           tripDate={tripStartDate}
           tripStartDate={tripStartDate}
           tripEndDate={tripEndDate}
           onSubmit={handleTransportSubmit}
+          isPending={isPending}
+          onCancel={onClose}
+        />
+      ) : selectedType === "logement" ? (
+        <LodgingForm
+          tripDate={tripStartDate}
+          tripStartDate={tripStartDate}
+          tripEndDate={tripEndDate}
+          onSubmit={handleLodgingSubmit}
           isPending={isPending}
           onCancel={onClose}
         />
