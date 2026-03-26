@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Loader2, Upload, X, Paperclip } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
+import { PriceSection } from "@/components/price-section";
 import type { EventType } from "@workspace/api-client-react";
 
 // ─── Static data ────────────────────────────────────────────────────────────
@@ -152,6 +153,7 @@ export interface TransportSubmitData {
   endTime: string | null;
   notes: string | null;
   pricePerPerson: number | null;
+  priceType: string | null;
   transportData: Record<string, unknown>;
 }
 
@@ -191,6 +193,7 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
   const [attachment, setAttachment] = useState<{ name: string; url: string } | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [isFree, setIsFree] = useState(false);
+  const [priceType, setPriceType] = useState("per_person");
 
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
 
@@ -238,6 +241,7 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
       endTime: d.arrivalTime || null,
       notes: d.notes || null,
       pricePerPerson: price,
+      priceType: price !== null ? priceType : null,
       transportData,
     });
   };
@@ -462,36 +466,14 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
 
           {/* Prix */}
           <Section title="Prix">
-            <div>
-              <Label>Prix par personne <span className="text-muted-foreground font-normal">(opt.)</span></Label>
-              <div className="flex items-center gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
-                  className={cn(
-                    "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
-                    isFree
-                      ? "border-green-500 bg-green-50 text-green-700"
-                      : "border-border bg-background text-muted-foreground hover:border-green-400"
-                  )}
-                >
-                  {isFree ? "✓ Gratuit" : "Gratuit"}
-                </button>
-                {!isFree && (
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={priceInput}
-                    onChange={e => setPriceInput(e.target.value)}
-                    placeholder="Ex: 89"
-                  />
-                )}
-                {!isFree && priceInput !== "" && (
-                  <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
-                )}
-              </div>
-            </div>
+            <PriceSection
+              priceInput={priceInput}
+              onPriceChange={setPriceInput}
+              isFree={isFree}
+              onFreeToggle={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
+              priceType={priceType}
+              onPriceTypeChange={setPriceType}
+            />
           </Section>
 
           {/* Notes */}

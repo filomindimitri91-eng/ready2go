@@ -166,6 +166,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [edited, setEdited] = useState<Record<string, number>>({});
   const [showAI, setShowAI] = useState(false);
+  const [customNotes, setCustomNotes] = useState("");
 
   const totalParticipants = adults + children;
 
@@ -177,7 +178,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
       const res = await fetch("/api/ai/budget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, nbPeople: totalParticipants, events }),
+        body: JSON.stringify({ destination, startDate, endDate, nbPeople: totalParticipants, events, customNotes: customNotes || undefined }),
       });
       if (!res.ok) throw new Error("Erreur serveur");
       const data = await res.json();
@@ -187,7 +188,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [destination, startDate, endDate, totalParticipants, events]);
+  }, [destination, startDate, endDate, totalParticipants, events, customNotes]);
 
   const getAmount = (cat: BudgetCategory) =>
     edited[cat.key] !== undefined ? edited[cat.key] : cat.amount;
@@ -316,6 +317,18 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
 
         {showAI && (
           <div className="px-4 pb-4 pt-2 space-y-4 bg-card">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Instructions pour l'IA <span className="font-normal normal-case">(facultatif)</span>
+              </label>
+              <textarea
+                value={customNotes}
+                onChange={e => setCustomNotes(e.target.value)}
+                placeholder="Ex : Voyage haut de gamme, hébergement prévu, enfants de 8 et 12 ans..."
+                rows={3}
+                className="flex w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 transition-all resize-none"
+              />
+            </div>
             <div className="flex items-center gap-3 flex-wrap">
               <button
                 onClick={generate}

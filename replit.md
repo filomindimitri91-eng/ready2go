@@ -50,24 +50,43 @@ A travel planning app in French where users can:
 - `/login` - Login/onboarding page (create username)
 - `/voyage/:id` - Trip details (program + group tabs)
 
+### Features
+- Username-only authentication (stored in localStorage)
+- Create/join trips via 8-char invite codes
+- 5 event types: activité, transport, logement, restauration, autre
+- Per-event pricing with `pricePerPerson` (null=unset, 0=gratuit, positive=price) and `priceType` (per_person/per_adult/per_child/per_couple/per_group)
+- Edit events via modal (PUT endpoint)
+- Budget tab with adults/children count, per-event cost breakdown, and AI estimation
+- AI estimation accepts custom notes for context
+- Map-based location search (Nominatim/OpenStreetMap)
+- Group tab with invite code + real-time member location sharing
+
 ### API Endpoints
 - `POST /api/users` - Create or find user by username
 - `GET /api/users/:userId` - Get user
 - `GET /api/trips?userId=X` - Get trips for user
-- `POST /api/trips` - Create trip (auto-generates invite code)
+- `POST /api/trips` - Create trip (auto-generates 8-char invite code)
 - `POST /api/trips/join` - Join trip with invite code
 - `GET /api/trips/:tripId` - Trip details with members and events
 - `DELETE /api/trips/:tripId` - Delete trip
 - `GET /api/trips/:tripId/members` - Get members
 - `GET /api/trips/:tripId/events` - Get events
 - `POST /api/trips/:tripId/events` - Create event
+- `PUT /api/trips/:tripId/events/:eventId` - Update event
 - `DELETE /api/trips/:tripId/events/:eventId` - Delete event
+- `POST /api/ai/budget` - AI budget estimation (accepts customNotes)
 
 ### DB Schema
 - `users` - id, username (unique), created_at
-- `trips` - id, name, destination, description, start_date, end_date, invite_code (unique), creator_id
+- `trips` - id, name, destination, description, start_date, end_date, invite_code (unique, 8 chars), creator_id
 - `trip_members` - id, trip_id, user_id, joined_at
-- `events` - id, trip_id, type, title, location, date, start_time, end_time, notes, creator_id, created_at
+- `events` - id, trip_id, type, title, location, date, start_time, end_time, notes, creator_id, price_per_person (real), price_type (text), created_at
+
+### Key Components
+- `artifacts/ready2go/src/pages/trip-details.tsx` — main trip page (5 tabs)
+- `artifacts/ready2go/src/components/budget-tab.tsx` — budget breakdown + AI estimation
+- `artifacts/ready2go/src/components/price-section.tsx` — shared price input + priceType selector
+- `artifacts/ready2go/src/components/activite-form.tsx`, `restauration-form.tsx`, `lodging-form.tsx`, `transport-form.tsx` — event forms
 
 ## TypeScript & Composite Projects
 

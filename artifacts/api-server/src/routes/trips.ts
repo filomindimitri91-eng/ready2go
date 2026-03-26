@@ -31,6 +31,7 @@ const CreateEventBody = z.object({
   endTime: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   pricePerPerson: z.number().optional().nullable(),
+  priceType: z.string().optional().nullable(),
   creatorId: z.coerce.number().int(),
   transportData: z.record(z.string(), z.any()).optional().nullable(),
   lodgingData: z.record(z.string(), z.any()).optional().nullable(),
@@ -319,6 +320,7 @@ router.post("/trips/:tripId/events", async (req, res) => {
         endTime: body.endTime ?? null,
         notes: body.notes ?? null,
         pricePerPerson: body.pricePerPerson ?? null,
+        priceType: body.priceType ?? null,
         transportData: body.transportData ?? null,
         lodgingData: body.lodgingData ?? null,
         restaurationData: body.restaurationData ?? null,
@@ -330,6 +332,48 @@ router.post("/trips/:tripId/events", async (req, res) => {
     res.status(201).json(event);
   } catch (err) {
     req.log.error({ err }, "Error creating event");
+    res.status(400).json({ error: "Requête invalide" });
+  }
+});
+
+const UpdateEventBody = z.object({
+  title: z.string().min(1).optional(),
+  date: z.string().optional(),
+  startTime: z.string().optional().nullable(),
+  endTime: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  pricePerPerson: z.number().optional().nullable(),
+  priceType: z.string().optional().nullable(),
+});
+
+router.put("/trips/:tripId/events/:eventId", async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.tripId);
+    const eventId = parseInt(req.params.eventId);
+    const body = UpdateEventBody.parse(req.body);
+
+    const [event] = await db.select().from(eventsTable)
+      .where(and(eq(eventsTable.id, eventId), eq(eventsTable.tripId, tripId))).limit(1);
+    if (!event) { res.status(404).json({ error: "Événement introuvable" }); return; }
+
+    const [updated] = await db.update(eventsTable)
+      .set({
+        ...(body.title !== undefined && { title: body.title }),
+        ...(body.date !== undefined && { date: body.date }),
+        ...(body.startTime !== undefined && { startTime: body.startTime }),
+        ...(body.endTime !== undefined && { endTime: body.endTime }),
+        ...(body.location !== undefined && { location: body.location }),
+        ...(body.notes !== undefined && { notes: body.notes }),
+        ...(body.pricePerPerson !== undefined && { pricePerPerson: body.pricePerPerson }),
+        ...(body.priceType !== undefined && { priceType: body.priceType }),
+      })
+      .where(eq(eventsTable.id, eventId))
+      .returning();
+
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Error updating event");
     res.status(400).json({ error: "Requête invalide" });
   }
 });

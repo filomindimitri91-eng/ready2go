@@ -8,7 +8,7 @@ import {
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
   ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
-  RefreshCw
+  RefreshCw, Pencil
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -37,6 +37,7 @@ import { WeatherWidget } from "@/components/weather-widget";
 import { NavButtons } from "@/components/nav-buttons";
 import { BudgetTab } from "@/components/budget-tab";
 import { DeplacerTab } from "@/components/deplacer-tab";
+import { PriceSection, PRICE_TYPE_LABEL } from "@/components/price-section";
 import logoImg from "@/assets/logo.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -93,7 +94,7 @@ interface TransportData {
   notes?: string;
 }
 
-function TransportCard({ event, onDelete }: { event: Event & { transportData?: TransportData | null }; onDelete: () => void }) {
+function TransportCard({ event, onDelete, onEdit }: { event: Event & { transportData?: TransportData | null }; onDelete: () => void; onEdit: () => void }) {
   const td = event.transportData as TransportData | null | undefined;
   const meta = EVENT_META.transport;
   const tt = td?.transportType ?? "";
@@ -122,6 +123,13 @@ function TransportCard({ event, onDelete }: { event: Event & { transportData?: T
                   : ""}
             </div>
           )}
+          <button
+            onClick={onEdit}
+            className="text-muted-foreground hover:text-primary transition-colors p-1"
+            title="Modifier"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
           <button
             onClick={onDelete}
             className="text-muted-foreground hover:text-destructive transition-colors p-1"
@@ -317,7 +325,7 @@ interface LodgingData {
   notes?: string;
 }
 
-function LodgingCard({ event, onDelete }: { event: Event & { lodgingData?: LodgingData | null }; onDelete: () => void }) {
+function LodgingCard({ event, onDelete, onEdit }: { event: Event & { lodgingData?: LodgingData | null }; onDelete: () => void; onEdit: () => void }) {
   const ld = event.lodgingData as LodgingData | null | undefined;
   const meta = EVENT_META.logement;
   const lt = ld?.lodgingType ?? "";
@@ -343,13 +351,22 @@ function LodgingCard({ event, onDelete }: { event: Event & { lodgingData?: Lodgi
             {label}
           </span>
         </div>
-        <button
-          onClick={onDelete}
-          className="text-muted-foreground hover:text-destructive transition-colors p-1"
-          title="Supprimer"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onEdit}
+            className="text-muted-foreground hover:text-primary transition-colors p-1"
+            title="Modifier"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="text-muted-foreground hover:text-destructive transition-colors p-1"
+            title="Supprimer"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Name */}
@@ -499,7 +516,7 @@ interface RestaurationData {
   notes?: string;
 }
 
-function RestaurantCard({ event, onDelete }: { event: Event & { restaurationData?: RestaurationData | null }; onDelete: () => void }) {
+function RestaurantCard({ event, onDelete, onEdit }: { event: Event & { restaurationData?: RestaurationData | null }; onDelete: () => void; onEdit: () => void }) {
   const rd = event.restaurationData as RestaurationData | null | undefined;
   const meta = EVENT_META.restauration;
   const rt = rd?.restoType ?? "";
@@ -520,9 +537,14 @@ function RestaurantCard({ event, onDelete }: { event: Event & { restaurationData
             {label}
           </span>
         </div>
-        <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1" title="Supprimer">
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={onEdit} className="text-muted-foreground hover:text-primary transition-colors p-1" title="Modifier">
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1" title="Supprimer">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Name */}
@@ -627,7 +649,7 @@ interface ActiviteData {
   ticketType?: string | null;
 }
 
-function ActiviteCard({ event, onDelete }: { event: Event & { activiteData?: ActiviteData | null }; onDelete: () => void }) {
+function ActiviteCard({ event, onDelete, onEdit }: { event: Event & { activiteData?: ActiviteData | null }; onDelete: () => void; onEdit: () => void }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const ad = event.activiteData as ActiviteData | null | undefined;
   const meta = EVENT_META.activite;
@@ -650,9 +672,14 @@ function ActiviteCard({ event, onDelete }: { event: Event & { activiteData?: Act
             {label}
           </span>
         </div>
-        <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1" title="Supprimer">
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={onEdit} className="text-muted-foreground hover:text-primary transition-colors p-1" title="Modifier">
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1" title="Supprimer">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Name */}
@@ -738,7 +765,7 @@ function ActiviteCard({ event, onDelete }: { event: Event & { activiteData?: Act
 
 // ─── Standard event card ──────────────────────────────────────────────────────
 
-function StandardCard({ event, onDelete }: { event: Event; onDelete: () => void }) {
+function StandardCard({ event, onDelete, onEdit }: { event: Event; onDelete: () => void; onEdit: () => void }) {
   const meta = EVENT_META[event.type] || EVENT_META.autre;
   const Icon = meta.icon;
   return (
@@ -758,6 +785,13 @@ function StandardCard({ event, onDelete }: { event: Event; onDelete: () => void 
               {event.startTime || "?"} {event.endTime ? `- ${event.endTime}` : ""}
             </span>
           )}
+          <button
+            onClick={onEdit}
+            className="text-muted-foreground hover:text-primary transition-colors p-1"
+            title="Modifier"
+          >
+            <Pencil className="w-4 h-4" />
+          </button>
           <button
             onClick={onDelete}
             className="text-muted-foreground hover:text-destructive transition-colors p-1"
@@ -796,6 +830,7 @@ export default function TripDetails() {
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [pendingPoiVenue, setPendingPoiVenue] = useState<PoiClickData | null>(null);
   const [navPoi, setNavPoi] = useState<PoiClickData | null>(null);
   const [mapSelectMode, setMapSelectMode] = useState(false);
@@ -1119,26 +1154,31 @@ export default function TripDetails() {
                               <TransportCard
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                                onEdit={() => setEditingEvent(event)}
                               />
                             ) : event.type === "logement" ? (
                               <LodgingCard
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                                onEdit={() => setEditingEvent(event)}
                               />
                             ) : (event.type === "restauration" || event.type === "reunion") ? (
                               <RestaurantCard
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                                onEdit={() => setEditingEvent(event)}
                               />
                             ) : event.type === "activite" ? (
                               <ActiviteCard
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                                onEdit={() => setEditingEvent(event)}
                               />
                             ) : (
                               <StandardCard
                                 event={event}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                                onEdit={() => setEditingEvent(event)}
                               />
                             )}
                           </div>
@@ -1333,6 +1373,18 @@ export default function TripDetails() {
         onPoiVenueConsumed={() => setPendingPoiVenue(null)}
         onMapSelectRequest={handleRequestMapSelect}
       />
+
+      {editingEvent && (
+        <EditEventModal
+          event={editingEvent}
+          tripId={tripId}
+          onClose={() => setEditingEvent(null)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: getGetTripQueryKey({ tripId }) });
+            setEditingEvent(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1362,11 +1414,12 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
   });
   const [simplePriceInput, setSimplePriceInput] = useState("");
   const [simpleIsFree, setSimpleIsFree] = useState(false);
+  const [simplePriceType, setSimplePriceType] = useState("per_person");
 
   const handleSimpleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const price = simpleIsFree ? 0 : (simplePriceInput !== "" ? parseFloat(simplePriceInput) : null);
-    onAdd({ type: selectedType, ...formData, pricePerPerson: price });
+    onAdd({ type: selectedType, ...formData, pricePerPerson: price, priceType: price !== null ? simplePriceType : null });
   };
 
   const handleTransportSubmit = (data: TransportSubmitData) => {
@@ -1539,37 +1592,14 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
             />
           </div>
 
-          <div>
-            <Label>Prix par personne (optionnel)</Label>
-            <div className="flex items-center gap-2 mt-1">
-              <button
-                type="button"
-                onClick={() => { setSimpleIsFree(v => !v); if (!simpleIsFree) setSimplePriceInput(""); }}
-                className={cn(
-                  "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
-                  simpleIsFree
-                    ? "border-green-500 bg-green-50 text-green-700"
-                    : "border-border bg-background text-muted-foreground hover:border-green-400"
-                )}
-              >
-                {simpleIsFree ? "✓ Gratuit" : "Gratuit"}
-              </button>
-              {!simpleIsFree && (
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={simplePriceInput}
-                  onChange={e => setSimplePriceInput(e.target.value)}
-                  placeholder="Ex: 10"
-                  className="flex-1"
-                />
-              )}
-              {!simpleIsFree && simplePriceInput !== "" && (
-                <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
-              )}
-            </div>
-          </div>
+          <PriceSection
+            priceInput={simplePriceInput}
+            onPriceChange={setSimplePriceInput}
+            isFree={simpleIsFree}
+            onFreeToggle={() => { setSimpleIsFree(v => !v); if (!simpleIsFree) setSimplePriceInput(""); }}
+            priceType={simplePriceType}
+            onPriceTypeChange={setSimplePriceType}
+          />
 
           <div className="pt-2 flex justify-end gap-3">
             <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
@@ -1579,6 +1609,130 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           </div>
         </form>
       )}
+    </Modal>
+  );
+}
+
+// ─── Edit Event Modal ─────────────────────────────────────────────────────────
+
+function EditEventModal({ event, tripId, onClose, onSuccess }: {
+  event: Event;
+  tripId: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const meta = EVENT_META[event.type] || EVENT_META.autre;
+  const [title, setTitle] = useState(event.title);
+  const [date, setDate] = useState(event.date ?? "");
+  const [startTime, setStartTime] = useState(event.startTime ?? "");
+  const [endTime, setEndTime] = useState(event.endTime ?? "");
+  const [location, setLocation] = useState(event.location ?? "");
+  const [notes, setNotes] = useState(event.notes ?? "");
+  const [priceInput, setPriceInput] = useState(
+    event.pricePerPerson != null && event.pricePerPerson > 0 ? String(event.pricePerPerson) : ""
+  );
+  const [isFree, setIsFree] = useState(event.pricePerPerson === 0);
+  const [priceType, setPriceType] = useState((event as any).priceType ?? "per_person");
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPending(true);
+    setError(null);
+    const price = isFree ? 0 : (priceInput !== "" ? parseFloat(priceInput) : null);
+    try {
+      const res = await fetch(`/api/trips/${tripId}/events/${event.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim() || event.title,
+          date: date || event.date,
+          startTime: startTime || null,
+          endTime: endTime || null,
+          location: location || null,
+          notes: notes || null,
+          pricePerPerson: price,
+          priceType: price !== null ? priceType : null,
+        }),
+      });
+      if (!res.ok) throw new Error("Erreur lors de la modification");
+      onSuccess();
+    } catch {
+      setError("Impossible de modifier l'événement. Veuillez réessayer.");
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Modifier l'événement">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex items-center gap-2 mb-2">
+          <div className={cn("p-1.5 rounded-md", meta.colorClass.split(" ")[1])}>
+            <meta.icon className={cn("w-4 h-4", meta.colorClass.split(" ")[0])} />
+          </div>
+          <span className={cn("text-xs font-semibold uppercase tracking-wider", meta.colorClass.split(" ")[0])}>
+            {meta.label}
+          </span>
+        </div>
+
+        <div>
+          <Label className="mb-1">Titre</Label>
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Titre de l'événement" required />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="mb-1">Date</Label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="mb-1">Début</Label>
+              <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+            </div>
+            <div>
+              <Label className="mb-1">Fin</Label>
+              <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <Label className="mb-1">Lieu <span className="text-muted-foreground text-xs">(facultatif)</span></Label>
+          <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Ex: Paris, France" />
+        </div>
+
+        <div>
+          <Label className="mb-1">Notes <span className="text-muted-foreground text-xs">(facultatif)</span></Label>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Informations complémentaires..."
+            className="flex w-full rounded-xl border-2 border-border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 transition-all resize-none"
+          />
+        </div>
+
+        <PriceSection
+          priceInput={priceInput}
+          onPriceChange={setPriceInput}
+          isFree={isFree}
+          onFreeToggle={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
+          priceType={priceType}
+          onPriceTypeChange={setPriceType}
+        />
+
+        {error && <p className="text-sm text-red-500 bg-red-50 rounded-xl px-3 py-2">{error}</p>}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Enregistrer"}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

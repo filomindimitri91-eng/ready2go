@@ -188,24 +188,26 @@ FORMAT JSON (tableau plat d'événements) :
 });
 
 // POST /api/ai/budget
-// Body: { destination, startDate, endDate, nbPeople, events }
+// Body: { destination, startDate, endDate, nbPeople, events, customNotes? }
 // Returns: { categories: [{label, amount, emoji}], total, currency, notes }
 router.post("/ai/budget", async (req, res) => {
   try {
-    const { destination, startDate, endDate, nbPeople, events } = req.body as {
+    const { destination, startDate, endDate, nbPeople, events, customNotes } = req.body as {
       destination: string;
       startDate: string;
       endDate: string;
       nbPeople: number;
       events: { type: string; title: string }[];
+      customNotes?: string;
     };
 
     const dayCount = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
     const eventSummary = events.map(e => `[${e.type}] ${e.title}`).join(", ") || "Aucun événement planifié";
+    const notesSection = customNotes?.trim() ? `\nInformations complémentaires fournies par l'utilisateur : ${customNotes.trim()}` : "";
 
     const prompt = `Tu es un expert en budget voyage. Estime le budget TOTAL pour un voyage à "${destination}" du ${startDate} au ${endDate} (${dayCount} jours) pour ${nbPeople} personne(s).
 
-Événements planifiés : ${eventSummary}
+Événements planifiés : ${eventSummary}${notesSection}
 
 Réponds UNIQUEMENT en JSON valide sans markdown :
 {
