@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Loader2, Upload, X, Paperclip, Map } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Loader2, Upload, X, Paperclip, Map, Search } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
 import type { EventType } from "@workspace/api-client-react";
@@ -198,6 +198,187 @@ function MapsButtons({ address, city, country, lat, lng }: {
   );
 }
 
+// ─── OpenStreetMap search ─────────────────────────────────────────────────────
+
+interface OsmRaw {
+  place_id: number;
+  display_name: string;
+  name?: string;
+  lat: string;
+  lon: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    country?: string;
+    postcode?: string;
+  };
+  extratags?: Record<string, string>;
+}
+
+export interface OsmPlace {
+  name: string;
+  address: string;
+  city: string;
+  country: string;
+  lat: string;
+  lng: string;
+  phone: string;
+  email: string;
+  website: string;
+  brand: string;
+}
+
+function parseOsm(r: OsmRaw): OsmPlace {
+  const a = r.address ?? {};
+  const et = r.extratags ?? {};
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const city = a.city ?? a.town ?? a.village ?? a.municipality ?? "";
+  const nameParts = r.display_name.split(",");
+  const name = r.name ?? nameParts[0]?.trim() ?? "";
+  return {
+    name,
+    address: street,
+    city,
+    country: a.country ?? "",
+    lat: r.lat,
+    lng: r.lon,
+    phone: et["contact:phone"] ?? et["phone"] ?? "",
+    email: et["contact:email"] ?? et["email"] ?? "",
+    website: et["contact:website"] ?? et["website"] ?? "",
+    brand: et["brand"] ?? "",
+  };
+}
+
+const OSM_HINT: Record<string, string> = {
+  hotel: "hôtel",
+  camping: "camping",
+  hostel: "auberge jeunesse",
+  guesthouse: "chambre hôtes",
+  rental: "location vacances",
+  airbnb: "",
+  other: "",
+};
+
+function LodgingSearchInput({ value, onChange, onSelect, lodgingType }: {
+  value: string;
+  onChange: (v: string) => void;
+  onSelect: (place: OsmPlace) => void;
+  lodgingType: string;
+}) {
+  const [results, setResults] = useState<OsmPlace[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const search = async (q: string) => {
+    if (q.trim().length < 3) { setResults([]); setOpen(false); return; }
+    setLoading(true);
+    try {
+      const hint = OSM_HINT[lodgingType] ?? "";
+      const query = hint ? `${q} ${hint}` : q;
+      const url =
+        `https://nominatim.openstreetmap.org/search` +
+        `?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=7&accept-language=fr`;
+      const res = await fetch(url, { headers: { "User-Agent": "Ready2Go/1.0" } });
+      const data: OsmRaw[] = await res.json();
+      const places = data.map(parseOsm).filter(p => p.name);
+      setResults(places);
+      setOpen(places.length > 0);
+    } catch {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (v: string) => {
+    onChange(v);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => search(v), 500);
+  };
+
+  const handleSelect = (place: OsmPlace) => {
+    onChange(place.name);
+    onSelect(place);
+    setOpen(false);
+    setResults([]);
+  };
+
+  return (
+    <div ref={box} className="relative">
+      <Label>
+        Nom de l'hébergement <span className="text-destructive ml-0.5">*</span>
+      </Label>
+      <div className="relative">
+        <input
+          type="text"
+          required
+          value={value}
+          onChange={e => handleChange(e.target.value)}
+          placeholder="Rechercher ou saisir le nom..."
+          className="flex h-12 w-full rounded-xl border-2 border-border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 transition-all pr-10"
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+          {loading
+            ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            : <Search className="w-4 h-4 text-muted-foreground/50" />
+          }
+        </div>
+      </div>
+
+      {open && results.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+          {results.map((place, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleSelect(place)}
+              className="w-full text-left px-4 py-3 hover:bg-muted/60 active:bg-muted transition-colors border-b border-border/40 last:border-0"
+            >
+              <div className="text-sm font-semibold text-foreground truncate">{place.name}</div>
+              <div className="text-xs text-muted-foreground truncate mt-0.5">
+                {[place.address, place.city, place.country].filter(Boolean).join(", ")}
+              </div>
+              {(place.phone || place.email) && (
+                <div className="text-xs text-primary/80 mt-1 flex flex-wrap gap-3">
+                  {place.phone && <span>📞 {place.phone}</span>}
+                  {place.email && <span>✉️ {place.email}</span>}
+                </div>
+              )}
+            </button>
+          ))}
+          <div className="px-4 py-1.5 text-[10px] text-muted-foreground bg-muted/30 flex items-center gap-1">
+            <span>Données ©</span>
+            <a
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-foreground transition-colors"
+            >
+              OpenStreetMap
+            </a>
+            <span>— contributeurs ODbL</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LodgingSubmitData {
@@ -262,6 +443,22 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
   const [attachment, setAttachment] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
 
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
+
+  // Auto-fill from OpenStreetMap selection — only overwrites empty fields to preserve manual edits
+  const handleOsmSelect = (place: OsmPlace) => {
+    setD(prev => ({
+      ...prev,
+      name:      place.name      || prev.name,
+      address:   place.address   || prev.address,
+      city:      place.city      || prev.city,
+      country:   place.country   || prev.country,
+      latitude:  place.lat       || prev.latitude,
+      longitude: place.lng       || prev.longitude,
+      phone:     place.phone     || prev.phone,
+      email:     place.email     || prev.email,
+      brand:     place.brand     || prev.brand,
+    }));
+  };
 
   const lt = d.lodgingType;
 
@@ -342,7 +539,12 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
         <>
           {/* Property info */}
           <Section title="Établissement">
-            <TextInput label="Nom de l'hébergement" value={d.name} onChange={set("name")} placeholder="Ex: Hôtel Mercure Paris Centre" required />
+            <LodgingSearchInput
+              value={d.name}
+              onChange={set("name")}
+              onSelect={handleOsmSelect}
+              lodgingType={lt}
+            />
             {showBrand && (
               <TextInput label="Chaîne / Marque" value={d.brand} onChange={set("brand")} placeholder="Ex: Mercure, Ibis, Accor..." optional />
             )}
