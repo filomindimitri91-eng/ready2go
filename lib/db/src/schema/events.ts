@@ -16,6 +16,7 @@ export const eventsTable = pgTable("events", {
   notes: text("notes"),
   transportData: jsonb("transport_data"),
   lodgingData: jsonb("lodging_data"),
+  restaurationData: jsonb("restauration_data"),
   creatorId: integer("creator_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

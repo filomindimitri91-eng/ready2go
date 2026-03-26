@@ -23,7 +23,7 @@ const CreateTripBody = z.object({
 });
 
 const CreateEventBody = z.object({
-  type: z.enum(["activite", "transport", "logement", "reunion", "autre"]),
+  type: z.enum(["activite", "transport", "logement", "reunion", "restauration", "autre"]),
   title: z.string().min(1),
   location: z.string().optional().nullable(),
   date: z.string().min(1),
@@ -33,6 +33,7 @@ const CreateEventBody = z.object({
   creatorId: z.coerce.number().int(),
   transportData: z.record(z.string(), z.any()).optional().nullable(),
   lodgingData: z.record(z.string(), z.any()).optional().nullable(),
+  restaurationData: z.record(z.string(), z.any()).optional().nullable(),
 });
 
 const router: IRouter = Router();
@@ -280,6 +281,7 @@ router.post("/trips/:tripId/events", async (req, res) => {
         notes: body.notes ?? null,
         transportData: body.transportData ?? null,
         lodgingData: body.lodgingData ?? null,
+        restaurationData: body.restaurationData ?? null,
         creatorId: body.creatorId,
       })
       .returning();
