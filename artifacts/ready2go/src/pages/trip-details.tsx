@@ -35,6 +35,8 @@ import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
 import { WeatherWidget } from "@/components/weather-widget";
 import { NavButtons } from "@/components/nav-buttons";
+import { BudgetTab } from "@/components/budget-tab";
+import { DeplacerTab } from "@/components/deplacer-tab";
 import logoImg from "@/assets/logo.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -789,7 +791,7 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -856,6 +858,99 @@ export default function TripDetails() {
     if (sharingIntervalRef.current) clearInterval(sharingIntervalRef.current);
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
   }, []);
+
+  // ─── Trip Chat ────────────────────────────────────────────────────────────
+  const [chatMessages, setChatMessages] = useState<{ id: number; userId: number; username: string; content: string; createdAt: string }[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchChat = async () => {
+    if (!tripId) return;
+    try {
+      const res = await fetch(`/api/trips/${tripId}/chat`);
+      if (res.ok) setChatMessages(await res.json());
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchChat();
+    chatPollRef.current = setInterval(fetchChat, 8_000);
+    return () => { if (chatPollRef.current) clearInterval(chatPollRef.current); };
+  }, [tripId]);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  const sendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || chatSending || !userId) return;
+    setChatSending(true);
+    setChatInput("");
+    try {
+      await fetch(`/api/trips/${tripId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, username, content: text }),
+      });
+      await fetchChat();
+    } catch {} finally {
+      setChatSending(false);
+    }
+  };
+
+  // ─── AI Program Generator ─────────────────────────────────────────────────
+  const [programGenLoading, setProgramGenLoading] = useState(false);
+  const [programGenEvents, setProgramGenEvents] = useState<any[] | null>(null);
+  const [programGenError, setProgramGenError] = useState<string | null>(null);
+  const [programGenAdded, setProgramGenAdded] = useState<Set<number>>(new Set());
+
+  const generateProgram = async () => {
+    if (!trip) return;
+    setProgramGenLoading(true);
+    setProgramGenError(null);
+    setProgramGenEvents(null);
+    setProgramGenAdded(new Set());
+    try {
+      const res = await fetch("/api/ai/generate-program", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: trip.destination,
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          existingEvents: (trip.events as any[]) ?? [],
+          creatorId: userId,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setProgramGenEvents(data.events ?? []);
+    } catch {
+      setProgramGenError("Erreur lors de la génération. Veuillez réessayer.");
+    } finally {
+      setProgramGenLoading(false);
+    }
+  };
+
+  const addGeneratedEvent = (ev: any, idx: number) => {
+    createEventMutation.mutate({
+      tripId,
+      data: {
+        type: ev.type ?? "activite",
+        title: ev.title,
+        date: ev.date,
+        startTime: ev.startTime ?? null,
+        endTime: ev.endTime ?? null,
+        location: ev.location ?? null,
+        notes: ev.notes ?? null,
+        creatorId: userId!,
+      } as any,
+    });
+    setProgramGenAdded((prev) => new Set([...prev, idx]));
+  };
 
   const handlePoiClick = (poi: PoiClickData) => {
     if (mapSelectMode) {
@@ -1002,34 +1097,26 @@ export default function TripDetails() {
 
       <main className="max-w-3xl mx-auto px-4 relative z-10">
         {/* Tabs */}
-        <div className="bg-card p-1.5 rounded-2xl shadow-lg border border-border/50 flex mb-8">
-          <button
-            onClick={() => setActiveTab("program")}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
-              activeTab === "program" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            📅 Programme
-          </button>
-          <button
-            onClick={() => setActiveTab("group")}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
-              activeTab === "group" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            👥 Groupe
-          </button>
-          <button
-            onClick={() => setActiveTab("help")}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
-              activeTab === "help" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            🤖 Assistant
-          </button>
+        <div className="bg-card p-1 rounded-2xl shadow-lg border border-border/50 flex gap-0.5 mb-8 overflow-x-auto">
+          {([
+            { id: "program",  emoji: "📅", label: "Programme" },
+            { id: "group",    emoji: "👥", label: "Groupe" },
+            { id: "budget",   emoji: "💰", label: "Budget" },
+            { id: "deplacer", emoji: "🚌", label: "Déplacer" },
+            { id: "help",     emoji: "🤖", label: "Assistant" },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex-1 min-w-[60px] flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[11px] font-semibold transition-all whitespace-nowrap",
+                activeTab === tab.id ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="text-sm">{tab.emoji}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Tab Content */}
@@ -1184,9 +1271,133 @@ export default function TripDetails() {
                   ))}
                 </div>
               </div>
+
+              {/* Group Chat */}
+              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-border/50 flex items-center gap-2">
+                  <span className="text-base">💬</span>
+                  <p className="font-semibold text-sm">Tchat du groupe</p>
+                </div>
+                <div className="h-56 overflow-y-auto p-3 space-y-2 flex flex-col">
+                  {chatMessages.length === 0 && (
+                    <div className="flex-1 flex items-center justify-center">
+                      <p className="text-xs text-muted-foreground">Aucun message — soyez le premier à écrire !</p>
+                    </div>
+                  )}
+                  {chatMessages.map((msg) => {
+                    const isMe = msg.userId === userId;
+                    return (
+                      <div key={msg.id} className={cn("flex flex-col max-w-[80%]", isMe ? "self-end items-end" : "self-start items-start")}>
+                        {!isMe && <p className="text-[10px] font-semibold text-muted-foreground mb-0.5 px-1">{msg.username}</p>}
+                        <div className={cn("px-3 py-2 rounded-2xl text-sm", isMe ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm")}>
+                          {msg.content}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={chatBottomRef} />
+                </div>
+                <div className="px-3 py-2 border-t border-border/50 flex gap-2 items-center">
+                  <input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                    placeholder="Écrire un message…"
+                    className="flex-1 text-sm border border-border rounded-xl px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
+                    disabled={chatSending}
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    disabled={!chatInput.trim() || chatSending}
+                    className="w-9 h-9 bg-primary text-primary-foreground rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0"
+                  >
+                    {chatSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
+
+          ) : activeTab === "budget" ? (
+            <BudgetTab
+              destination={trip.destination}
+              startDate={trip.startDate}
+              endDate={trip.endDate}
+              events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title })) ?? []}
+            />
+
+          ) : activeTab === "deplacer" ? (
+            <DeplacerTab destination={trip.destination} />
+
           ) : (
-            <TripHelp destination={trip.destination} apiBase="" />
+            /* Assistant tab — program generator + AI chat */
+            <div className="space-y-5">
+              {/* Program generator */}
+              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sm">✨ Générer un programme</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">L'IA complète les créneaux libres sans toucher aux événements existants</p>
+                  </div>
+                  <button
+                    onClick={generateProgram}
+                    disabled={programGenLoading}
+                    className="shrink-0 flex items-center gap-2 text-xs font-semibold bg-primary text-primary-foreground px-3 py-2 rounded-xl hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                  >
+                    {programGenLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "🪄"}
+                    {programGenLoading ? "Génération…" : "Générer"}
+                  </button>
+                </div>
+
+                {programGenError && (
+                  <p className="text-xs text-red-500 px-4 py-2">{programGenError}</p>
+                )}
+
+                {programGenEvents && programGenEvents.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-4 py-3">Aucune suggestion générée — le programme semble déjà complet !</p>
+                )}
+
+                {programGenEvents && programGenEvents.length > 0 && (
+                  <div className="divide-y divide-border/40">
+                    {(() => {
+                      const typeEmoji: Record<string, string> = { activite: "🎭", transport: "✈️", logement: "🏨", restauration: "🍽️", reunion: "👥", autre: "📌" };
+                      return programGenEvents.map((ev, i) => {
+                      const added = programGenAdded.has(i);
+                      return (
+                        <div key={i} className={cn("flex items-start gap-3 px-4 py-3 transition-colors", added ? "opacity-50" : "")}>
+                          <span className="text-lg">{typeEmoji[ev.type] ?? "📌"}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{ev.title}</p>
+                            <p className="text-xs text-muted-foreground">{ev.date}{ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ""}` : ""}</p>
+                            {ev.location && <p className="text-xs text-muted-foreground truncate">📍 {ev.location}</p>}
+                          </div>
+                          <button
+                            onClick={() => addGeneratedEvent(ev, i)}
+                            disabled={added}
+                            className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
+                          >
+                            {added ? "✓ Ajouté" : "+ Ajouter"}
+                          </button>
+                        </div>
+                      );
+                    });
+                    })()}
+                    <div className="px-4 py-2">
+                      <button
+                        onClick={() => {
+                          programGenEvents.forEach((ev, i) => { if (!programGenAdded.has(i)) addGeneratedEvent(ev, i); });
+                        }}
+                        className="text-xs font-semibold text-primary hover:underline"
+                      >
+                        Tout ajouter au programme
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* AI chat */}
+              <TripHelp destination={trip.destination} apiBase="" />
+            </div>
           )}
         </motion.div>
       </main>

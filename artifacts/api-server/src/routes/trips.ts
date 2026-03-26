@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, tripsTable, tripMembersTable, usersTable, eventsTable } from "@workspace/db";
-import { eq, and, count, inArray } from "drizzle-orm";
+import { db, tripsTable, tripMembersTable, usersTable, eventsTable, tripChatMessagesTable } from "@workspace/db";
+import { eq, and, count, inArray, asc } from "drizzle-orm";
 import { z } from "zod";
 import {
   GetTripsQueryParams,
@@ -354,6 +354,44 @@ router.delete("/trips/:tripId/events/:eventId", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting event");
+    res.status(400).json({ error: "Requête invalide" });
+  }
+});
+
+// ─── Trip Chat ────────────────────────────────────────────────────────────────
+const ChatMessageBody = z.object({
+  userId: z.coerce.number().int(),
+  username: z.string().min(1),
+  content: z.string().min(1).max(2000),
+});
+
+router.get("/trips/:tripId/chat", async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.tripId);
+    const msgs = await db
+      .select()
+      .from(tripChatMessagesTable)
+      .where(eq(tripChatMessagesTable.tripId, tripId))
+      .orderBy(asc(tripChatMessagesTable.createdAt))
+      .limit(200);
+    res.json(msgs);
+  } catch (err) {
+    req.log.error({ err }, "Error getting chat");
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/trips/:tripId/chat", async (req, res) => {
+  try {
+    const tripId = parseInt(req.params.tripId);
+    const body = ChatMessageBody.parse(req.body);
+    const [msg] = await db
+      .insert(tripChatMessagesTable)
+      .values({ tripId, userId: body.userId, username: body.username, content: body.content })
+      .returning();
+    res.status(201).json(msg);
+  } catch (err) {
+    req.log.error({ err }, "Error posting chat");
     res.status(400).json({ error: "Requête invalide" });
   }
 });

@@ -102,4 +102,186 @@ router.post("/ai/chat", async (req, res) => {
   }
 });
 
+// POST /api/ai/generate-program
+// Body: { destination, startDate, endDate, existingEvents, creatorId }
+// Returns: { events: [{type, title, date, startTime, endTime, location, notes}] }
+router.post("/ai/generate-program", async (req, res) => {
+  try {
+    const { destination, startDate, endDate, existingEvents, creatorId } = req.body as {
+      destination: string;
+      startDate: string;
+      endDate: string;
+      existingEvents: { type: string; title: string; date: string; startTime?: string; endTime?: string; location?: string }[];
+      creatorId: number;
+    };
+
+    const existingSummary = existingEvents.length > 0
+      ? existingEvents.map(e => `- ${e.date} ${e.startTime ?? "?"}: [${e.type}] ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("\n")
+      : "Aucun événement existant.";
+
+    const prompt = `Tu es un expert en planification de voyages. Génère un programme de voyage complet et cohérent pour une destination "${destination}" du ${startDate} au ${endDate}.
+
+ÉVÉNEMENTS DÉJÀ PLANIFIÉS (ne pas modifier, ne pas en créer qui chevauchent ces créneaux) :
+${existingSummary}
+
+RÈGLES STRICTES :
+1. Ne génère QUE des événements pour les créneaux LIBRES (pas de chevauchement avec les existants)
+2. Respecte les distances géographiques et les temps de trajet réalistes
+3. Inclus des pauses repas (restauration), des activités touristiques, et des déplacements logiques
+4. Adapte le programme à la destination et à la culture locale
+5. Chaque journée doit être réaliste (6h-22h max, avec pauses)
+6. Réponds UNIQUEMENT en JSON valide, sans markdown, sans explication
+
+FORMAT JSON ATTENDU (tableau d'événements) :
+[
+  {
+    "type": "activite" | "transport" | "logement" | "restauration" | "autre",
+    "title": "Nom de l'événement",
+    "date": "YYYY-MM-DD",
+    "startTime": "HH:MM",
+    "endTime": "HH:MM",
+    "location": "Adresse ou lieu précis",
+    "notes": "Description ou infos utiles"
+  }
+]`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 3000,
+      messages: [
+        { role: "system", content: "Tu es un assistant de planification de voyages expert. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "[]";
+    let events: any[] = [];
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      events = JSON.parse(cleaned);
+    } catch {
+      events = [];
+    }
+
+    res.json({ events });
+  } catch (err: any) {
+    console.error("[ai/generate-program]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
+// POST /api/ai/budget
+// Body: { destination, startDate, endDate, nbPeople, events }
+// Returns: { categories: [{label, amount, emoji}], total, currency, notes }
+router.post("/ai/budget", async (req, res) => {
+  try {
+    const { destination, startDate, endDate, nbPeople, events } = req.body as {
+      destination: string;
+      startDate: string;
+      endDate: string;
+      nbPeople: number;
+      events: { type: string; title: string }[];
+    };
+
+    const dayCount = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
+    const eventSummary = events.map(e => `[${e.type}] ${e.title}`).join(", ") || "Aucun événement planifié";
+
+    const prompt = `Tu es un expert en budget voyage. Estime le budget TOTAL pour un voyage à "${destination}" du ${startDate} au ${endDate} (${dayCount} jours) pour ${nbPeople} personne(s).
+
+Événements planifiés : ${eventSummary}
+
+Réponds UNIQUEMENT en JSON valide sans markdown :
+{
+  "currency": "EUR",
+  "total": 1500,
+  "notes": "Estimation basée sur... (1-2 phrases)",
+  "categories": [
+    { "key": "logement", "label": "Logement", "emoji": "🏨", "amount": 600 },
+    { "key": "transport", "label": "Transport", "emoji": "✈️", "amount": 400 },
+    { "key": "restauration", "label": "Restauration", "emoji": "🍽️", "amount": 300 },
+    { "key": "activite", "label": "Activités", "emoji": "🎭", "amount": 150 },
+    { "key": "divers", "label": "Divers", "emoji": "🛍️", "amount": 50 }
+  ]
+}`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 800,
+      messages: [
+        { role: "system", content: "Tu es un assistant de budget voyage. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let budget: any = {};
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      budget = JSON.parse(cleaned);
+    } catch {
+      budget = { currency: "EUR", total: 0, categories: [], notes: "Estimation indisponible" };
+    }
+
+    res.json(budget);
+  } catch (err: any) {
+    console.error("[ai/budget]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
+// POST /api/ai/transit
+// Body: { from, to, city, date? }
+// Returns: { itinerary: string, steps: [{mode, line, from, to, duration, instruction}], mapsUrl }
+router.post("/ai/transit", async (req, res) => {
+  try {
+    const { from, to, city } = req.body as { from: string; to: string; city: string };
+
+    const prompt = `Tu es un expert en transports en commun. Donne l'itinéraire en transports en commun pour aller de "${from}" à "${to}" dans la ville / région de "${city}".
+
+Réponds UNIQUEMENT en JSON valide sans markdown :
+{
+  "summary": "Résumé en 1 phrase (ex: Bus 42 → Métro ligne 3, ~25 min)",
+  "totalDuration": "25 min",
+  "steps": [
+    {
+      "mode": "bus" | "metro" | "tram" | "rer" | "train" | "marche" | "autre",
+      "emoji": "🚌",
+      "line": "42",
+      "from": "Arrêt de départ",
+      "to": "Arrêt d'arrivée",
+      "duration": "8 min",
+      "instruction": "Prendre le bus 42 direction Centre-Ville"
+    }
+  ],
+  "tips": "Conseil utile (ex: ticket valable 1h30, zone 1-2...)",
+  "mapsUrl": "https://www.google.com/maps/dir/?api=1&origin=FROM&destination=TO&travelmode=transit"
+}
+
+Pour mapsUrl, remplace FROM par "${encodeURIComponent(from + ", " + city)}" et TO par "${encodeURIComponent(to + ", " + city)}".`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 1200,
+      messages: [
+        { role: "system", content: "Tu es un expert en transports en commun urbains. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let result: any = {};
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      result = JSON.parse(cleaned);
+    } catch {
+      result = { summary: "Itinéraire indisponible", steps: [], tips: "", mapsUrl: "" };
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[ai/transit]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
 export default router;
