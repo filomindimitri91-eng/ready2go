@@ -1,0 +1,16 @@
+packages:
+  "framer-motion": "For premium page transitions, modal animations, and list staggering."
+  "date-fns": "For beautiful date formatting in French."
+  "clsx": "Utility for constructing className strings conditionally."
+  "tailwind-merge": "Utility to merge Tailwind classes without style conflicts."
+  "lucide-react": "Beautiful, consistent iconography."
+
+images:
+  - path: "artifacts/ready2go/public/images/onboarding-bg.png"
+    description: "Abstract 3D gradient landscape with soft vibrant colors (teal, emerald, soft purple) representing travel, maps, and modern startup aesthetics."
+    aspect_ratio: "16:9"
+
+notes:
+  - "The app uses localStorage to persist the user session (pseudo/username)."
+  - "Using Wouter for routing."
+  - "All data fetching is done via standard fetch or TanStack Query using the provided @workspace/api-client-react hooks."
