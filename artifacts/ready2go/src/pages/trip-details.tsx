@@ -25,6 +25,7 @@ import {
   Event
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
+import { CurrencyTab } from "@/components/currency-tab";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
@@ -825,7 +826,7 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help" | "currency">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -1086,6 +1087,7 @@ export default function TripDetails() {
             { id: "program",  emoji: "📅", label: "Programme" },
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
+            { id: "currency", emoji: "💱", label: "Convertir" },
             { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
@@ -1313,6 +1315,9 @@ export default function TripDetails() {
               endDate={trip.endDate}
               events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title, pricePerPerson: e.pricePerPerson ?? null })) ?? []}
             />
+
+          ) : activeTab === "currency" ? (
+            <CurrencyTab />
 
           ) : activeTab === "deplacer" ? (
             <DeplacerTab destination={trip.destination} />

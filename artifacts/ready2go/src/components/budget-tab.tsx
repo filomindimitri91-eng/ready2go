@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Loader2, RefreshCw, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, RefreshCw, Users, ChevronDown, ChevronUp, Coins } from "lucide-react";
+import { TOP_CURRENCIES, CURRENCY_MAP, fmtCurrency } from "@/components/currency-tab";
 
 interface BudgetCategory {
   key: string;
@@ -40,8 +41,7 @@ interface Props {
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#06b6d4"];
 
-const fmt = (n: number, currency = "EUR") =>
-  new Intl.NumberFormat("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }).format(n);
+const fmt = (n: number, currency = "EUR") => fmtCurrency(n, currency);
 
 const EVENT_EMOJI: Record<string, string> = {
   activite: "🎯", transport: "🚌", logement: "🏨", restauration: "🍽️", reunion: "👥", autre: "📍",
@@ -52,11 +52,13 @@ function PriceToggleRow({
   adults,
   children,
   onChange,
+  currency = "EUR",
 }: {
   row: EventCostRow;
   adults: number;
   children: number;
   onChange: (r: Partial<EventCostRow>) => void;
+  currency?: string;
 }) {
   const adultTotal = row.adultFree ? 0 : row.adultPrice * adults;
   const childTotal = row.childFree ? 0 : row.childPrice * children;
@@ -66,7 +68,7 @@ function PriceToggleRow({
     <div className="bg-card border border-border/50 rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium truncate flex-1">{row.title}</span>
-        <span className="text-sm font-bold text-primary shrink-0">{fmt(lineTotal)}</span>
+        <span className="text-sm font-bold text-primary shrink-0">{fmt(lineTotal, currency)}</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
         {/* Adults */}
@@ -96,7 +98,7 @@ function PriceToggleRow({
                 className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             )}
-            {!row.adultFree && <span className="text-[10px] text-muted-foreground">€</span>}
+            {!row.adultFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
           </div>
         </div>
         {/* Children */}
@@ -126,7 +128,7 @@ function PriceToggleRow({
                 className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             )}
-            {!row.childFree && <span className="text-[10px] text-muted-foreground">€</span>}
+            {!row.childFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
           </div>
         </div>
       </div>
@@ -137,6 +139,7 @@ function PriceToggleRow({
 export function BudgetTab({ destination, startDate, endDate, events }: Props) {
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
+  const [selectedCurrency, setSelectedCurrency] = useState("EUR");
 
   const pricedEvents = events.filter(e => e.pricePerPerson !== null && e.pricePerPerson !== undefined);
 
@@ -178,7 +181,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
       const res = await fetch("/api/ai/budget", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, startDate, endDate, nbPeople: totalParticipants, events, customNotes: customNotes || undefined }),
+        body: JSON.stringify({ destination, startDate, endDate, nbPeople: totalParticipants, events, customNotes: customNotes || undefined, currency: selectedCurrency }),
       });
       if (!res.ok) throw new Error("Erreur serveur");
       const data = await res.json();
@@ -188,14 +191,14 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [destination, startDate, endDate, totalParticipants, events, customNotes]);
+  }, [destination, startDate, endDate, totalParticipants, events, customNotes, selectedCurrency]);
 
   const getAmount = (cat: BudgetCategory) =>
     edited[cat.key] !== undefined ? edited[cat.key] : cat.amount;
 
   const categories = budget?.categories ?? [];
   const aiTotal = categories.reduce((sum, c) => sum + getAmount(c), 0);
-  const currency = budget?.currency ?? "EUR";
+  const currency = budget?.currency ?? selectedCurrency;
 
   const chartData = categories.map((c) => ({
     name: `${c.emoji} ${c.label}`,
@@ -241,6 +244,36 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
         </p>
       </div>
 
+      {/* ── Devise ── */}
+      <div className="bg-card border border-border/50 rounded-2xl px-4 py-4 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <Coins className="w-3.5 h-3.5" /> Devise du voyage
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {TOP_CURRENCIES.map(code => {
+            const c = CURRENCY_MAP[code];
+            if (!c) return null;
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => { setSelectedCurrency(code); setBudget(null); }}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  selectedCurrency === code
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {c.flag} {code}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Les montants et l'estimation IA seront affichés en {selectedCurrency}.
+        </p>
+      </div>
+
       {/* ── Coûts des événements ── */}
       {pricedEvents.length > 0 ? (
         <div className="space-y-3">
@@ -274,6 +307,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
               adults={adults}
               children={children}
               onChange={patch => updateRow(i, patch)}
+              currency={currency}
             />
           ))}
 
@@ -282,7 +316,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold text-primary uppercase tracking-wider">Total réel (événements)</p>
-                <p className="text-3xl font-bold text-foreground mt-1">{fmt(eventTotal)}</p>
+                <p className="text-3xl font-bold text-foreground mt-1">{fmt(eventTotal, currency)}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Pour {adults} adulte{adults > 1 ? "s" : ""}{children > 0 ? ` + ${children} enfant${children > 1 ? "s" : ""}` : ""}
                 </p>

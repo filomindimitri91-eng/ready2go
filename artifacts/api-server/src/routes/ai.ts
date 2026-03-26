@@ -188,17 +188,18 @@ FORMAT JSON (tableau plat d'événements) :
 });
 
 // POST /api/ai/budget
-// Body: { destination, startDate, endDate, nbPeople, events, customNotes? }
+// Body: { destination, startDate, endDate, nbPeople, events, customNotes?, currency? }
 // Returns: { categories: [{label, amount, emoji}], total, currency, notes }
 router.post("/ai/budget", async (req, res) => {
   try {
-    const { destination, startDate, endDate, nbPeople, events, customNotes } = req.body as {
+    const { destination, startDate, endDate, nbPeople, events, customNotes, currency = "EUR" } = req.body as {
       destination: string;
       startDate: string;
       endDate: string;
       nbPeople: number;
       events: { type: string; title: string }[];
       customNotes?: string;
+      currency?: string;
     };
 
     const dayCount = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
@@ -209,9 +210,11 @@ router.post("/ai/budget", async (req, res) => {
 
 Événements planifiés : ${eventSummary}${notesSection}
 
+DEVISE DEMANDÉE : ${currency} — Tous les montants DOIVENT être en ${currency}. Le champ "currency" doit être exactement "${currency}".
+
 Réponds UNIQUEMENT en JSON valide sans markdown :
 {
-  "currency": "EUR",
+  "currency": "${currency}",
   "total": 1500,
   "notes": "Estimation basée sur... (1-2 phrases)",
   "categories": [
