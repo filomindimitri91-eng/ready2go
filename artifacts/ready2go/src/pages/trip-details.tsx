@@ -1190,7 +1190,7 @@ export default function TripDetails() {
                 </div>
                 {programGenError && <p className="text-xs text-red-500 px-4 py-2">{programGenError}</p>}
                 {programGenEvents && programGenEvents.length === 0 && (
-                  <p className="text-xs text-muted-foreground px-4 py-3">Aucune suggestion — le programme semble déjà complet !</p>
+                  <p className="text-xs text-muted-foreground px-4 py-3">Aucune suggestion générée — veuillez réessayer.</p>
                 )}
                 {programGenEvents && programGenEvents.length > 0 && (
                   <div className="divide-y divide-border/40">
@@ -1235,7 +1235,7 @@ export default function TripDetails() {
                 <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-sm">🎉 À ne pas rater</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Événements dans un rayon de 50 km pendant votre voyage</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Événements dans un rayon de 100 km pendant votre voyage</p>
                   </div>
                   {nearbyEvents && (
                     <button

@@ -115,37 +115,43 @@ router.post("/ai/generate-program", async (req, res) => {
       creatorId: number;
     };
 
-    const existingSummary = existingEvents.length > 0
-      ? existingEvents.map(e => `- ${e.date} ${e.startTime ?? "?"}: [${e.type}] ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("\n")
-      : "Aucun événement existant.";
+    const isEmpty = existingEvents.length === 0;
+    const existingSummary = isEmpty
+      ? "AUCUN ÉVÉNEMENT — le programme est entièrement vide, tu dois remplir TOUTES les journées de A à Z."
+      : existingEvents.map(e => `- ${e.date} ${e.startTime ?? "?"}: [${e.type}] ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("\n");
 
-    const prompt = `Tu es un expert en planification de voyages avec une connaissance approfondie des meilleures adresses mondiales. Génère un programme de voyage COMPLET et COHÉRENT pour "${destination}" du ${startDate} au ${endDate}.
+    const prompt = `Tu es un expert en planification de voyages qui s'appuie sur les meilleurs blogs voyage (Lonely Planet, Routard, Condé Nast Traveler, Atlas Obscura, Time Out, culture trip, etc.) et les avis TripAdvisor / Google Maps. Génère un programme de voyage COMPLET pour "${destination}" du ${startDate} au ${endDate}.
 
-ÉVÉNEMENTS DÉJÀ PLANIFIÉS (ne pas toucher, ne pas chevaucher) :
+ÉTAT ACTUEL DU PROGRAMME :
 ${existingSummary}
 
-RÈGLES ABSOLUES :
-1. Ne génère QUE des événements pour les créneaux LIBRES — aucun chevauchement avec les existants
-2. Utilise des NOMS RÉELS d'établissements connus et bien notés à ${destination} : restaurants réputés, musées incontournables, attractions populaires — PAS de noms génériques
-3. Respecte les distances géographiques : deux lieux consécutifs doivent être à distance raisonnable (max 30 min de trajet), ajoute un transport si nécessaire
-4. Chaque journée : réveil réaliste (9h-10h min), déjeuner (~12h-14h), dîner (~19h-21h), pas d'événement après 23h
-5. Équilibre : 1 repas local typique, 1-2 activités culturelles/touristiques par jour selon la durée
-6. Indique toujours une adresse précise dans "location"
-7. Pour les restaurants et activités, inclus un avis type TripAdvisor/Google Maps (note et brève description)
+MISSION ABSOLUE :
+${isEmpty
+  ? `Le programme est VIDE. Tu DOIS générer un programme complet pour CHAQUE jour du voyage, du matin au soir. Il est INTERDIT de retourner un tableau vide. Chaque journée doit être intégralement remplie.`
+  : `Complète UNIQUEMENT les créneaux libres entre les événements existants. Ne touche pas aux événements déjà planifiés.`}
+
+RÈGLES :
+1. Utilise UNIQUEMENT des noms RÉELS d'établissements : restaurants reconnus, musées, monuments, bars, marchés locaux — jamais de noms inventés
+2. Respecte les distances : deux lieux consécutifs doivent être accessibles en max 30 min, ajoute un transport si nécessaire
+3. Structure journalière : petit-déjeuner optionnel (~9h), activité matin, déjeuner (~12h-14h), activité après-midi, dîner (~19h-21h) — pas d'événement après 23h
+4. Varie les types : restaurants locaux typiques, musées, balades, shopping, bars, expériences culturelles
+5. Chaque lieu doit avoir une adresse précise
+6. Inclus une note et source pour chaque lieu (TripAdvisor, Google, Lonely Planet, Le Routard, Time Out…)
+7. JAMAIS de tableau vide — s'il n'y a pas de créneau libre, génère au moins une suggestion bonus
 8. Réponds UNIQUEMENT en JSON valide, sans markdown
 
-FORMAT JSON ATTENDU :
+FORMAT JSON :
 [
   {
     "type": "activite" | "transport" | "restauration" | "autre",
-    "title": "Nom réel du lieu (ex: Le Jules Verne, Musée d'Orsay)",
+    "title": "Nom réel du lieu",
     "date": "YYYY-MM-DD",
     "startTime": "HH:MM",
     "endTime": "HH:MM",
     "location": "Adresse complète précise",
     "rating": "4.5/5",
-    "reviewSource": "TripAdvisor" | "Google Maps" | "Michelin",
-    "notes": "Description du lieu : cuisine, ambiance, conseil de réservation, etc."
+    "reviewSource": "TripAdvisor" | "Google Maps" | "Lonely Planet" | "Le Routard" | "Time Out" | "Michelin",
+    "notes": "Description : spécialités, ambiance, conseil de réservation, why go"
   }
 ]`;
 
@@ -299,39 +305,41 @@ router.post("/ai/events-nearby", async (req, res) => {
       endDate: string;
     };
 
-    const prompt = `Tu es un expert en événements culturels et touristiques. Liste les VRAIS événements notables qui se déroulent (ou qui ont lieu chaque année à cette période) dans un rayon de 50 km autour de "${destination}" entre le ${startDate} et le ${endDate}.
+    const prompt = `Tu es un expert en événements culturels, sportifs et de divertissement. Tu connais parfaitement Ticketmaster, Songkick, Bandsintown, les comptes officiels Instagram/Facebook/TikTok des artistes et des salles, les sites des clubs sportifs, les offices du tourisme, et les agendas culturels locaux. Liste les événements notables dans un rayon de 100 km autour de "${destination}" entre le ${startDate} et le ${endDate}.
 
-TYPES D'ÉVÉNEMENTS À INCLURE :
-- Concerts et spectacles (artistes connus, salles réputées)
-- Événements sportifs (matchs, compétitions, tournois)
-- Festivals culturels ou musicaux
-- Carnavals, fêtes locales et célébrations traditionnelles
-- Marchés exceptionnels (Noël, artisanat, gastronomie)
-- Expositions temporaires majeures
-- Spectacles en plein air
+TYPES D'ÉVÉNEMENTS À INCLURE (tout type confondu) :
+- Concerts : artistes connus ou locaux, festivals de musique (rock, électro, classique, jazz…)
+- Sport : matchs de football/rugby/basket/tennis, compétitions, Grands Prix, marathons
+- Festivals culturels, gastronomiques, cinéma, arts de rue
+- Carnavals, fêtes traditionnelles, foires, braderies
+- Marchés thématiques (Noël, antiquités, producteurs locaux)
+- Expositions temporaires majeures dans les musées
+- Spectacles de rue, sons et lumières, feux d'artifice
+- Fêtes nationales ou régionales
 
-RÈGLES :
-1. Propose des événements RÉELS ou récurrents à cette période de l'année (fêtes nationales, festivals annuels, etc.) — si les dates exactes sont inconnues, utilise une estimation cohérente dans la plage du voyage
-2. Indique le lieu PRÉCIS (nom de la salle, stade, place) avec son adresse
-3. Estime la distance depuis ${destination} (en km)
-4. Inclus une note de popularité / avis
-5. Génère entre 6 et 12 événements variés
-6. Réponds UNIQUEMENT en JSON valide, sans markdown
+RÈGLES ABSOLUES :
+1. TOUJOURS retourner au moins 8 événements — c'est INTERDIT de retourner moins de 8 résultats
+2. Si aucun événement certain n'est connu pour cette date exacte, cherche les événements RÉCURRENTS et ANNUELS de la région à cette période (fêtes nationales, festivals qui ont lieu chaque année, matchs de championnat réguliers selon la saison sportive, marchés hebdomadaires, etc.)
+3. Si la période est creuse en événements confirmés, propose les événements permanents ou semi-permanents : expositions longue durée, spectacles hebdomadaires, animations régulières
+4. S'inspirer de ce que l'on trouverait sur : Ticketmaster, Eventbrite, Songkick, le compte Instagram officiel de la ville, l'office du tourisme, les clubs sportifs locaux, Facebook Events, les comptes TikTok d'influenceurs locaux
+5. Indiquer le lieu PRÉCIS avec son adresse complète
+6. Estimer la distance réelle depuis ${destination}
+7. Répondre UNIQUEMENT en JSON valide, sans markdown
 
 FORMAT JSON ATTENDU :
 [
   {
     "category": "concert" | "sport" | "festival" | "carnaval" | "marché" | "exposition" | "spectacle" | "fête",
-    "title": "Nom précis de l'événement",
-    "venue": "Nom du lieu (ex: Stade de France, Palais des Congrès)",
+    "title": "Nom précis de l'événement ou du lieu",
+    "venue": "Nom de la salle, stade, place ou parc",
     "date": "YYYY-MM-DD",
     "startTime": "HH:MM",
     "endTime": "HH:MM",
     "location": "Adresse complète",
-    "distance": "12 km",
-    "rating": "4.6/5",
-    "reviewSource": "TripAdvisor" | "Google" | "Notoriété locale",
-    "notes": "Description de l'événement, artiste, équipe, ambiance, billetterie",
+    "distance": "XX km de ${destination}",
+    "rating": "4.X/5",
+    "reviewSource": "Ticketmaster" | "TripAdvisor" | "Google" | "Eventbrite" | "Office du tourisme" | "Instagram" | "Notoriété locale",
+    "notes": "Description : artiste/équipe/thème, ambiance, billetterie, pourquoi y aller",
     "type": "activite"
   }
 ]`;
