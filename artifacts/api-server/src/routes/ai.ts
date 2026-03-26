@@ -117,41 +117,48 @@ router.post("/ai/generate-program", async (req, res) => {
 
     const isEmpty = existingEvents.length === 0;
     const existingSummary = isEmpty
-      ? "AUCUN ÉVÉNEMENT — le programme est entièrement vide, tu dois remplir TOUTES les journées de A à Z."
+      ? "AUCUN ÉVÉNEMENT — programme entièrement vide."
       : existingEvents.map(e => `- ${e.date} ${e.startTime ?? "?"}: [${e.type}] ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("\n");
 
-    const prompt = `Tu es un expert en planification de voyages qui s'appuie sur les meilleurs blogs voyage (Lonely Planet, Routard, Condé Nast Traveler, Atlas Obscura, Time Out, culture trip, etc.) et les avis TripAdvisor / Google Maps. Génère un programme de voyage COMPLET pour "${destination}" du ${startDate} au ${endDate}.
+    const prompt = `Tu es l'assistant de voyage Ready2Go, un guide expert incarné par la Boussole. Tu t'appuies sur Lonely Planet, Le Routard, Condé Nast Traveler, Atlas Obscura, Time Out, TripAdvisor, Google Maps et les meilleurs blogs voyage pour créer des itinéraires mémorables.
 
-ÉTAT ACTUEL DU PROGRAMME :
+DESTINATION : ${destination}
+PÉRIODE : du ${startDate} au ${endDate}
+PROGRAMME EXISTANT :
 ${existingSummary}
 
-MISSION ABSOLUE :
+MISSION :
 ${isEmpty
-  ? `Le programme est VIDE. Tu DOIS générer un programme complet pour CHAQUE jour du voyage, du matin au soir. Il est INTERDIT de retourner un tableau vide. Chaque journée doit être intégralement remplie.`
-  : `Complète UNIQUEMENT les créneaux libres entre les événements existants. Ne touche pas aux événements déjà planifiés.`}
+  ? "Le programme est VIDE. Tu DOIS générer un itinéraire COMPLET pour CHAQUE journée, du matin au soir. INTERDIT de retourner un tableau vide ou incomplet."
+  : "Complète UNIQUEMENT les créneaux libres. Ne touche pas aux événements existants."}
 
-RÈGLES :
-1. Utilise UNIQUEMENT des noms RÉELS d'établissements : restaurants reconnus, musées, monuments, bars, marchés locaux — jamais de noms inventés
-2. Respecte les distances : deux lieux consécutifs doivent être accessibles en max 30 min, ajoute un transport si nécessaire
-3. Structure journalière : petit-déjeuner optionnel (~9h), activité matin, déjeuner (~12h-14h), activité après-midi, dîner (~19h-21h) — pas d'événement après 23h
-4. Varie les types : restaurants locaux typiques, musées, balades, shopping, bars, expériences culturelles
-5. Chaque lieu doit avoir une adresse précise
-6. Inclus une note et source pour chaque lieu (TripAdvisor, Google, Lonely Planet, Le Routard, Time Out…)
-7. JAMAIS de tableau vide — s'il n'y a pas de créneau libre, génère au moins une suggestion bonus
-8. Réponds UNIQUEMENT en JSON valide, sans markdown
+STRUCTURE DE CHAQUE JOURNÉE (obligatoire) :
+- MATIN (~09h00–12h30) : 1 activité ou visite de site
+- DÉJEUNER (~12h30–14h00) : 1 restaurant local reconnu
+- APRÈS-MIDI (~14h00–18h30) : 1 à 2 activités / balades / shopping
+- SOIR (~19h00–21h30) : 1 dîner dans un établissement réputé
+- Ajoute un transport entre deux lieux distants de plus de 20 min
 
-FORMAT JSON :
+RÈGLES IMPÉRATIVES :
+1. Noms RÉELS uniquement — restaurants réputés, musées officiels, monuments reconnus, aucun nom inventé
+2. Adresse précise pour chaque lieu
+3. Note (ex: "4.6/5") et source (TripAdvisor, Google, Lonely Planet, Le Routard, Time Out, Michelin…)
+4. Distances logiques : pas de croisements inutiles de la ville
+5. JAMAIS de tableau vide — minimum 3 événements par jour
+6. Réponds UNIQUEMENT en JSON valide, sans markdown ni texte autour
+
+FORMAT JSON (tableau plat d'événements) :
 [
   {
     "type": "activite" | "transport" | "restauration" | "autre",
-    "title": "Nom réel du lieu",
+    "title": "Nom réel et précis du lieu",
     "date": "YYYY-MM-DD",
     "startTime": "HH:MM",
     "endTime": "HH:MM",
-    "location": "Adresse complète précise",
-    "rating": "4.5/5",
+    "location": "Adresse complète et précise",
+    "rating": "4.X/5",
     "reviewSource": "TripAdvisor" | "Google Maps" | "Lonely Planet" | "Le Routard" | "Time Out" | "Michelin",
-    "notes": "Description : spécialités, ambiance, conseil de réservation, why go"
+    "notes": "Pourquoi y aller, spécialités, ambiance, conseil de réservation"
   }
 ]`;
 
@@ -305,44 +312,55 @@ router.post("/ai/events-nearby", async (req, res) => {
       endDate: string;
     };
 
-    const prompt = `Tu es un expert en événements culturels, sportifs et de divertissement. Tu connais parfaitement Ticketmaster, Songkick, Bandsintown, les comptes officiels Instagram/Facebook/TikTok des artistes et des salles, les sites des clubs sportifs, les offices du tourisme, et les agendas culturels locaux. Liste les événements notables dans un rayon de 100 km autour de "${destination}" entre le ${startDate} et le ${endDate}.
+    const prompt = `Tu es l'assistant de voyage Ready2Go, incarné par la Boussole. Tu connais parfaitement Ticketmaster, Eventbrite, Songkick, Bandsintown, les comptes Instagram/Facebook/TikTok officiels des artistes et des villes, les offices du tourisme, les clubs sportifs, et les agendas culturels locaux.
 
-TYPES D'ÉVÉNEMENTS À INCLURE (tout type confondu) :
-- Concerts : artistes connus ou locaux, festivals de musique (rock, électro, classique, jazz…)
-- Sport : matchs de football/rugby/basket/tennis, compétitions, Grands Prix, marathons
-- Festivals culturels, gastronomiques, cinéma, arts de rue
-- Carnavals, fêtes traditionnelles, foires, braderies
-- Marchés thématiques (Noël, antiquités, producteurs locaux)
-- Expositions temporaires majeures dans les musées
-- Spectacles de rue, sons et lumières, feux d'artifice
-- Fêtes nationales ou régionales
+MISSION : Identifier les événements incontournables autour de ${destination} (rayon 50 km) entre le ${startDate} et le ${endDate}.
 
-RÈGLES ABSOLUES :
-1. TOUJOURS retourner au moins 8 événements — c'est INTERDIT de retourner moins de 8 résultats
-2. Si aucun événement certain n'est connu pour cette date exacte, cherche les événements RÉCURRENTS et ANNUELS de la région à cette période (fêtes nationales, festivals qui ont lieu chaque année, matchs de championnat réguliers selon la saison sportive, marchés hebdomadaires, etc.)
-3. Si la période est creuse en événements confirmés, propose les événements permanents ou semi-permanents : expositions longue durée, spectacles hebdomadaires, animations régulières
-4. S'inspirer de ce que l'on trouverait sur : Ticketmaster, Eventbrite, Songkick, le compte Instagram officiel de la ville, l'office du tourisme, les clubs sportifs locaux, Facebook Events, les comptes TikTok d'influenceurs locaux
-5. Indiquer le lieu PRÉCIS avec son adresse complète
-6. Estimer la distance réelle depuis ${destination}
-7. Répondre UNIQUEMENT en JSON valide, sans markdown
+RÈGLE D'OR — NE JAMAIS RÉPONDRE VIDE :
+Tu DOIS toujours trouver quelque chose. Voici la hiérarchie à appliquer dans l'ordre :
+1. Événements confirmés (concerts, matchs, festivals annoncés sur Ticketmaster/Eventbrite/réseaux sociaux)
+2. Événements récurrents à cette période (fêtes nationales, marchés hebdomadaires, matchs de championnat selon la saison, festivals annuels)
+3. Expositions temporaires ou longue durée dans les musées locaux
+4. Expériences uniques "du moment" : visite nocturne, spectacle de rue régulier, événement gastronomique, marché artisanal
+5. EN DERNIER RECOURS : Transformer un POI permanent en expérience incontournable (ex : "Coucher de soleil depuis le belvédère X — unique en cette saison")
 
-FORMAT JSON ATTENDU :
-[
-  {
-    "category": "concert" | "sport" | "festival" | "carnaval" | "marché" | "exposition" | "spectacle" | "fête",
-    "title": "Nom précis de l'événement ou du lieu",
-    "venue": "Nom de la salle, stade, place ou parc",
-    "date": "YYYY-MM-DD",
-    "startTime": "HH:MM",
-    "endTime": "HH:MM",
-    "location": "Adresse complète",
-    "distance": "XX km de ${destination}",
-    "rating": "4.X/5",
-    "reviewSource": "Ticketmaster" | "TripAdvisor" | "Google" | "Eventbrite" | "Office du tourisme" | "Instagram" | "Notoriété locale",
-    "notes": "Description : artiste/équipe/thème, ambiance, billetterie, pourquoi y aller",
-    "type": "activite"
-  }
-]`;
+TYPES D'ÉVÉNEMENTS :
+Concerts, festivals musicaux, matchs sportifs, tournois, Grands Prix, carnavals, fêtes locales, braderies, marchés thématiques, expositions, spectacles de rue, sons et lumières, feux d'artifice, fêtes régionales.
+
+CONTRAINTES :
+- Minimum 8 suggestions — INTERDIT d'en retourner moins
+- 1 événement "incontournable" mis en avant (le plus exceptionnel/unique)
+- Adresse précise pour chaque lieu
+- Distance estimée depuis ${destination}
+- Source vérifiable (Ticketmaster, TripAdvisor, Google, Eventbrite, Instagram, Office du tourisme…)
+- Réponds UNIQUEMENT en JSON valide, sans markdown
+
+FORMAT JSON :
+{
+  "incontournable": {
+    "titre": "Nom de l'événement ou de l'expérience",
+    "description": "2 lignes engageantes expliquant pourquoi c'est unique à ces dates",
+    "dates": "Date(s) et horaire(s)",
+    "source": "Ticketmaster" | "Instagram" | "Office du tourisme" | "TripAdvisor" | autre,
+    "category": "concert" | "sport" | "festival" | "exposition" | "expérience" | autre
+  },
+  "events": [
+    {
+      "category": "concert" | "sport" | "festival" | "carnaval" | "marché" | "exposition" | "spectacle" | "fête" | "expérience",
+      "title": "Nom précis",
+      "venue": "Nom du lieu",
+      "date": "YYYY-MM-DD",
+      "startTime": "HH:MM",
+      "endTime": "HH:MM",
+      "location": "Adresse complète",
+      "distance": "XX km",
+      "rating": "4.X/5",
+      "reviewSource": "Ticketmaster" | "TripAdvisor" | "Google" | "Eventbrite" | "Instagram" | "Office du tourisme" | "Notoriété locale",
+      "notes": "Artiste/équipe/thème, ambiance, billetterie, pourquoi y aller",
+      "type": "activite"
+    }
+  ]
+}`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-5-mini",
@@ -353,16 +371,23 @@ FORMAT JSON ATTENDU :
       ],
     });
 
-    const raw = completion.choices[0]?.message?.content?.trim() ?? "[]";
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let incontournable: any = null;
     let events: any[] = [];
     try {
       const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-      events = JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed)) {
+        events = parsed;
+      } else {
+        incontournable = parsed.incontournable ?? null;
+        events = Array.isArray(parsed.events) ? parsed.events : [];
+      }
     } catch {
       events = [];
     }
 
-    res.json({ events });
+    res.json({ incontournable, events });
   } catch (err: any) {
     console.error("[ai/events-nearby]", err);
     res.status(500).json({ error: err?.message ?? "Erreur serveur" });

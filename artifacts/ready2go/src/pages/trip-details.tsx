@@ -995,27 +995,34 @@ export default function TripDetails() {
   // ─── À ne pas rater — Nearby Events ──────────────────────────────────────
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyEvents, setNearbyEvents] = useState<any[] | null>(null);
+  const [nearbyIncontournable, setNearbyIncontournable] = useState<any | null>(null);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [nearbyAdded, setNearbyAdded] = useState<Set<number>>(new Set());
   const nearbyFetchedRef = useRef(false);
 
+  const fetchNearbyEvents = (t: typeof trip) => {
+    if (!t) return;
+    setNearbyLoading(true);
+    setNearbyError(null);
+    fetch("/api/ai/events-nearby", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination: t.destination, startDate: t.startDate, endDate: t.endDate }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setNearbyIncontournable(data.incontournable ?? null);
+        setNearbyEvents(data.events ?? []);
+      })
+      .catch(() => setNearbyError("Impossible de charger les événements. Réessayez."))
+      .finally(() => setNearbyLoading(false));
+  };
+
   useEffect(() => {
     if (activeTab === "program" && !nearbyFetchedRef.current && trip) {
       nearbyFetchedRef.current = true;
-      setNearbyLoading(true);
-      setNearbyError(null);
-      fetch("/api/ai/events-nearby", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.error) throw new Error(data.error);
-          setNearbyEvents(data.events ?? []);
-        })
-        .catch(() => setNearbyError("Impossible de charger les événements. Réessayez."))
-        .finally(() => setNearbyLoading(false));
+      fetchNearbyEvents(trip);
     }
   }, [activeTab, trip]);
 
@@ -1235,41 +1242,57 @@ export default function TripDetails() {
                 <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-sm">🎉 À ne pas rater</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Événements dans un rayon de 100 km pendant votre voyage</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Événements dans un rayon de 50 km pendant votre voyage</p>
                   </div>
-                  {nearbyEvents && (
+                  {nearbyEvents !== null && !nearbyLoading && (
                     <button
                       onClick={() => {
                         nearbyFetchedRef.current = false;
                         setNearbyEvents(null);
+                        setNearbyIncontournable(null);
                         setNearbyAdded(new Set());
-                        setNearbyLoading(true);
-                        setNearbyError(null);
-                        fetch("/api/ai/events-nearby", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
-                        })
-                          .then(r => r.json())
-                          .then(d => { if (d.error) throw new Error(d.error); setNearbyEvents(d.events ?? []); })
-                          .catch(() => setNearbyError("Erreur. Réessayez."))
-                          .finally(() => setNearbyLoading(false));
+                        fetchNearbyEvents(trip);
                       }}
                       className="shrink-0 text-xs text-primary font-semibold hover:underline"
                     >🔄 Actualiser</button>
                   )}
                 </div>
 
+                {/* Loading */}
                 {nearbyLoading && (
-                  <div className="flex items-center justify-center gap-2 py-4">
+                  <div className="flex items-center justify-center gap-2 py-5">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
                     <p className="text-xs text-muted-foreground">Recherche des événements à proximité…</p>
                   </div>
                 )}
+
+                {/* Error */}
                 {nearbyError && !nearbyLoading && <p className="text-xs text-red-500 px-4 py-2">{nearbyError}</p>}
-                {!nearbyLoading && nearbyEvents && nearbyEvents.length === 0 && (
-                  <p className="text-xs text-muted-foreground px-4 py-3">Aucun événement notable identifié pour ces dates.</p>
+
+                {/* Empty */}
+                {!nearbyLoading && nearbyEvents && nearbyEvents.length === 0 && !nearbyIncontournable && (
+                  <p className="text-xs text-muted-foreground px-4 py-3">Aucun événement identifié — essayez d'actualiser.</p>
                 )}
+
+                {/* Incontournable highlighted card */}
+                {!nearbyLoading && nearbyIncontournable && (
+                  <div className="m-3 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⭐</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                        Incontournable · {nearbyIncontournable.category ?? "Événement"}
+                      </span>
+                    </div>
+                    <p className="font-bold text-sm leading-tight">{nearbyIncontournable.titre}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{nearbyIncontournable.description}</p>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {nearbyIncontournable.dates && <p className="text-xs text-foreground font-medium">📅 {nearbyIncontournable.dates}</p>}
+                      {nearbyIncontournable.source && <p className="text-xs text-muted-foreground">Source : {nearbyIncontournable.source}</p>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Events list */}
                 {!nearbyLoading && nearbyEvents && nearbyEvents.length > 0 && (
                   <div className="divide-y divide-border/40">
                     {nearbyEvents.map((ev, i) => {
@@ -1277,6 +1300,7 @@ export default function TripDetails() {
                       const categoryEmoji: Record<string, string> = {
                         concert: "🎵", sport: "🏆", festival: "🎪", carnaval: "🎭",
                         marché: "🛒", exposition: "🖼️", spectacle: "🎬", fête: "🎊",
+                        expérience: "✨",
                       };
                       return (
                         <div key={i} className={cn("flex items-start gap-3 px-4 py-3 transition-colors", added ? "opacity-50" : "")}>
