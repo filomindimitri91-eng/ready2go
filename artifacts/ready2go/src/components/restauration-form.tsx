@@ -291,6 +291,7 @@ export interface RestaurationSubmitData {
   startTime: string | null;
   endTime: string | null;
   notes: string | null;
+  pricePerPerson: number | null;
   restaurationData: Record<string, unknown>;
 }
 
@@ -344,6 +345,8 @@ const blank = {
 export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialVenue, onRequestMapSelect }: Props) {
   const [d, setD] = useState({ ...blank, date: tripDate });
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
+  const [priceInput, setPriceInput] = useState("");
+  const [isFree, setIsFree] = useState(false);
 
   // Pre-fill from POI click on map
   useEffect(() => {
@@ -388,6 +391,7 @@ export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmi
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rt) return;
+    const price = isFree ? 0 : (priceInput !== "" ? parseFloat(priceInput) : null);
     onSubmit({
       type: "restauration" as EventType,
       title: buildTitle(),
@@ -396,6 +400,7 @@ export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmi
       startTime: d.time || null,
       endTime: d.timeEnd || null,
       notes: d.notes || null,
+      pricePerPerson: price,
       restaurationData: { ...d },
     });
   };
@@ -510,6 +515,40 @@ export function RestaurationForm({ tripDate, tripStartDate, tripEndDate, onSubmi
               placeholder="Ex: DUPONT — 19h30 — 4 pers."
               optional
             />
+          </Section>
+
+          {/* Prix */}
+          <Section title="Prix">
+            <div>
+              <Label>Prix par personne <span className="text-muted-foreground font-normal">(opt.)</span></Label>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
+                  className={cn(
+                    "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
+                    isFree
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-400"
+                  )}
+                >
+                  {isFree ? "✓ Gratuit" : "Gratuit"}
+                </button>
+                {!isFree && (
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={priceInput}
+                    onChange={e => setPriceInput(e.target.value)}
+                    placeholder="Ex: 25"
+                  />
+                )}
+                {!isFree && priceInput !== "" && (
+                  <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
+                )}
+              </div>
+            </div>
           </Section>
 
           {/* Menu */}

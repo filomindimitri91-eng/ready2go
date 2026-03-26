@@ -260,6 +260,7 @@ export interface ActiviteSubmitData {
   startTime: string | null;
   endTime: string | null;
   notes: string | null;
+  pricePerPerson: number | null;
   activiteData: Record<string, unknown>;
 }
 
@@ -318,6 +319,8 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
   const [d, setD] = useState({ ...blank, date: tripDate });
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
   const [ticket, setTicket] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [isFree, setIsFree] = useState(false);
 
   // Pre-fill from POI click on map
   useEffect(() => {
@@ -356,6 +359,7 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
     if (!d.activiteType) return;
     const titleParts = [selectedType?.emoji ?? "📍", d.name || (selectedType?.label ?? "Activité")];
     if (d.city) titleParts.push(`· ${d.city}`);
+    const price = isFree ? 0 : (priceInput !== "" ? parseFloat(priceInput) : null);
     onSubmit({
       type: "activite",
       title: titleParts.join(" "),
@@ -364,6 +368,7 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
       startTime: d.time || null,
       endTime: d.timeEnd || null,
       notes: d.notes || null,
+      pricePerPerson: price,
       activiteData: {
         activiteType: d.activiteType,
         name: d.name,
@@ -459,6 +464,37 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
               placeholder="Ex: ABC123" optional />
             <TextInput label="Site web" value={d.website} onChange={set("website")}
               placeholder="Ex: https://www.louvre.fr" optional />
+            <div>
+              <Label className="mb-1">Prix par personne <span className="text-muted-foreground text-xs">(facultatif)</span></Label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
+                  className={cn(
+                    "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
+                    isFree
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-400"
+                  )}
+                >
+                  {isFree ? "✓ Gratuit" : "Gratuit"}
+                </button>
+                {!isFree && (
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={priceInput}
+                    onChange={e => setPriceInput(e.target.value)}
+                    placeholder="Ex: 15"
+                    className="flex-1"
+                  />
+                )}
+                {!isFree && priceInput !== "" && (
+                  <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
+                )}
+              </div>
+            </div>
           </Section>
 
           {/* ── Ticket ── */}

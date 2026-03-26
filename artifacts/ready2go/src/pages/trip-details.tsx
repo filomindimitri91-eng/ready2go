@@ -1271,7 +1271,7 @@ export default function TripDetails() {
               destination={trip.destination}
               startDate={trip.startDate}
               endDate={trip.endDate}
-              events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title })) ?? []}
+              events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title, pricePerPerson: e.pricePerPerson ?? null })) ?? []}
             />
 
           ) : activeTab === "deplacer" ? (
@@ -1360,10 +1360,13 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
     location: "",
     notes: "",
   });
+  const [simplePriceInput, setSimplePriceInput] = useState("");
+  const [simpleIsFree, setSimpleIsFree] = useState(false);
 
   const handleSimpleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd({ type: selectedType, ...formData });
+    const price = simpleIsFree ? 0 : (simplePriceInput !== "" ? parseFloat(simplePriceInput) : null);
+    onAdd({ type: selectedType, ...formData, pricePerPerson: price });
   };
 
   const handleTransportSubmit = (data: TransportSubmitData) => {
@@ -1534,6 +1537,38 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
               value={formData.notes}
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
             />
+          </div>
+
+          <div>
+            <Label>Prix par personne (optionnel)</Label>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => { setSimpleIsFree(v => !v); if (!simpleIsFree) setSimplePriceInput(""); }}
+                className={cn(
+                  "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
+                  simpleIsFree
+                    ? "border-green-500 bg-green-50 text-green-700"
+                    : "border-border bg-background text-muted-foreground hover:border-green-400"
+                )}
+              >
+                {simpleIsFree ? "✓ Gratuit" : "Gratuit"}
+              </button>
+              {!simpleIsFree && (
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={simplePriceInput}
+                  onChange={e => setSimplePriceInput(e.target.value)}
+                  placeholder="Ex: 10"
+                  className="flex-1"
+                />
+              )}
+              {!simpleIsFree && simplePriceInput !== "" && (
+                <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
+              )}
+            </div>
           </div>
 
           <div className="pt-2 flex justify-end gap-3">

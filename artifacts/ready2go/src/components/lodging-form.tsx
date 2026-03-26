@@ -431,6 +431,7 @@ export interface LodgingSubmitData {
   startTime: string | null;
   endTime: string | null;
   notes: string | null;
+  pricePerPerson: number | null;
   lodgingData: Record<string, unknown>;
 }
 
@@ -483,6 +484,8 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
   const [d, setD] = useState({ ...blank, checkInDate: tripDate });
   const [breakfastIncluded, setBreakfastIncluded] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [isFree, setIsFree] = useState(false);
 
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
 
@@ -539,6 +542,7 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
       attachmentSize: attachment?.size ?? null,
       attachmentType: attachment?.type ?? null,
     };
+    const price = isFree ? 0 : (priceInput !== "" ? parseFloat(priceInput) : null);
     onSubmit({
       type: "logement" as EventType,
       title: buildTitle(),
@@ -547,6 +551,7 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
       startTime: d.checkInTime || null,
       endTime: d.checkOutTime || null,
       notes: d.notes || null,
+      pricePerPerson: price,
       lodgingData,
     });
   };
@@ -711,6 +716,40 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
               </Row2>
             )}
             <FileUpload value={attachment} onChange={setAttachment} />
+          </Section>
+
+          {/* Prix */}
+          <Section title="Prix">
+            <div>
+              <Label>Prix par personne <span className="text-muted-foreground font-normal">(opt.)</span></Label>
+              <div className="flex items-center gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => { setIsFree(v => !v); if (!isFree) setPriceInput(""); }}
+                  className={cn(
+                    "shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all",
+                    isFree
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-400"
+                  )}
+                >
+                  {isFree ? "✓ Gratuit" : "Gratuit"}
+                </button>
+                {!isFree && (
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={priceInput}
+                    onChange={e => setPriceInput(e.target.value)}
+                    placeholder="Ex: 120"
+                  />
+                )}
+                {!isFree && priceInput !== "" && (
+                  <span className="text-xs text-muted-foreground shrink-0">€ / pers.</span>
+                )}
+              </div>
+            </div>
           </Section>
 
           {/* Notes */}
