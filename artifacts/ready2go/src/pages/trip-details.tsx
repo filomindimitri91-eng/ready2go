@@ -791,7 +791,7 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "events" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -1000,7 +1000,7 @@ export default function TripDetails() {
   const nearbyFetchedRef = useRef(false);
 
   useEffect(() => {
-    if (activeTab === "events" && !nearbyFetchedRef.current && trip) {
+    if (activeTab === "program" && !nearbyFetchedRef.current && trip) {
       nearbyFetchedRef.current = true;
       setNearbyLoading(true);
       setNearbyError(null);
@@ -1147,7 +1147,6 @@ export default function TripDetails() {
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
             { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
-            { id: "events",   emoji: "🎉", label: "À ne pas rater" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
             <button
@@ -1227,6 +1226,78 @@ export default function TripDetails() {
                       >Tout ajouter</button>
                       <button onClick={() => setProgramGenEvents(null)} className="text-xs text-muted-foreground hover:underline">Fermer</button>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* À ne pas rater */}
+              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-border/40 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sm">🎉 À ne pas rater</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Événements dans un rayon de 50 km pendant votre voyage</p>
+                  </div>
+                  {nearbyEvents && (
+                    <button
+                      onClick={() => {
+                        nearbyFetchedRef.current = false;
+                        setNearbyEvents(null);
+                        setNearbyAdded(new Set());
+                        setNearbyLoading(true);
+                        setNearbyError(null);
+                        fetch("/api/ai/events-nearby", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
+                        })
+                          .then(r => r.json())
+                          .then(d => { if (d.error) throw new Error(d.error); setNearbyEvents(d.events ?? []); })
+                          .catch(() => setNearbyError("Erreur. Réessayez."))
+                          .finally(() => setNearbyLoading(false));
+                      }}
+                      className="shrink-0 text-xs text-primary font-semibold hover:underline"
+                    >🔄 Actualiser</button>
+                  )}
+                </div>
+
+                {nearbyLoading && (
+                  <div className="flex items-center justify-center gap-2 py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground">Recherche des événements à proximité…</p>
+                  </div>
+                )}
+                {nearbyError && !nearbyLoading && <p className="text-xs text-red-500 px-4 py-2">{nearbyError}</p>}
+                {!nearbyLoading && nearbyEvents && nearbyEvents.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-4 py-3">Aucun événement notable identifié pour ces dates.</p>
+                )}
+                {!nearbyLoading && nearbyEvents && nearbyEvents.length > 0 && (
+                  <div className="divide-y divide-border/40">
+                    {nearbyEvents.map((ev, i) => {
+                      const added = nearbyAdded.has(i);
+                      const categoryEmoji: Record<string, string> = {
+                        concert: "🎵", sport: "🏆", festival: "🎪", carnaval: "🎭",
+                        marché: "🛒", exposition: "🖼️", spectacle: "🎬", fête: "🎊",
+                      };
+                      return (
+                        <div key={i} className={cn("flex items-start gap-3 px-4 py-3 transition-colors", added ? "opacity-50" : "")}>
+                          <span className="text-lg">{categoryEmoji[ev.category] ?? "🎉"}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">{ev.title}</p>
+                            {ev.venue && <p className="text-xs text-primary font-medium truncate">{ev.venue}</p>}
+                            <p className="text-xs text-muted-foreground">{ev.date}{ev.startTime ? ` · ${ev.startTime}` : ""}{ev.distance ? ` · 📍 ${ev.distance}` : ""}</p>
+                            {ev.rating && <p className="text-xs text-amber-600 font-medium">⭐ {ev.rating} · {ev.reviewSource ?? "Avis"}</p>}
+                            {ev.notes && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{ev.notes}</p>}
+                          </div>
+                          <button
+                            onClick={() => addNearbyEvent(ev, i)}
+                            disabled={added}
+                            className="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 transition-colors"
+                          >
+                            {added ? "✓ Ajouté" : "+ Ajouter"}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1430,100 +1501,6 @@ export default function TripDetails() {
 
           ) : activeTab === "deplacer" ? (
             <DeplacerTab destination={trip.destination} />
-
-          ) : activeTab === "events" ? (
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold">🎉 À ne pas rater</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Événements dans un rayon de 50 km · {trip.startDate} → {trip.endDate}
-                  </p>
-                </div>
-                {nearbyEvents && (
-                  <button
-                    onClick={() => { nearbyFetchedRef.current = false; setNearbyEvents(null); setNearbyAdded(new Set()); setNearbyLoading(true); setNearbyError(null);
-                      fetch("/api/ai/events-nearby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }) })
-                        .then(r => r.json()).then(d => { if (d.error) throw new Error(d.error); setNearbyEvents(d.events ?? []); }).catch(() => setNearbyError("Erreur. Réessayez.")).finally(() => setNearbyLoading(false));
-                    }}
-                    className="text-xs text-primary font-semibold hover:underline shrink-0"
-                  >🔄 Actualiser</button>
-                )}
-              </div>
-
-              {/* Loading */}
-              {nearbyLoading && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">Recherche des événements à proximité…</p>
-                </div>
-              )}
-
-              {/* Error */}
-              {nearbyError && !nearbyLoading && (
-                <div className="text-center py-10 text-sm text-red-500">{nearbyError}</div>
-              )}
-
-              {/* Empty */}
-              {!nearbyLoading && nearbyEvents && nearbyEvents.length === 0 && (
-                <div className="text-center py-16 bg-card border border-dashed rounded-3xl">
-                  <p className="text-4xl mb-3">🎭</p>
-                  <h3 className="text-lg font-bold mb-1">Aucun événement trouvé</h3>
-                  <p className="text-muted-foreground text-sm">Aucun événement notable identifié pour ces dates.</p>
-                </div>
-              )}
-
-              {/* Events list */}
-              {!nearbyLoading && nearbyEvents && nearbyEvents.length > 0 && (
-                <div className="space-y-3">
-                  {nearbyEvents.map((ev, i) => {
-                    const added = nearbyAdded.has(i);
-                    const categoryEmoji: Record<string, string> = {
-                      concert: "🎵", sport: "🏆", festival: "🎪", carnaval: "🎭",
-                      marché: "🛒", exposition: "🖼️", spectacle: "🎬", fête: "🎊",
-                    };
-                    const emoji = categoryEmoji[ev.category] ?? "🎉";
-                    return (
-                      <div key={i} className={cn("bg-card border border-border/50 rounded-2xl overflow-hidden transition-opacity", added ? "opacity-60" : "")}>
-                        <div className="flex items-start gap-3 p-4">
-                          <span className="text-2xl flex-shrink-0 mt-0.5">{emoji}</span>
-                          <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="font-semibold text-sm leading-tight">{ev.title}</p>
-                                {ev.venue && <p className="text-xs text-primary font-medium mt-0.5">{ev.venue}</p>}
-                              </div>
-                              {ev.category && (
-                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                  {ev.category}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                              {ev.date && <p className="text-xs text-muted-foreground">📅 {ev.date}{ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ""}` : ""}</p>}
-                              {ev.distance && <p className="text-xs text-muted-foreground">📍 {ev.distance}</p>}
-                              {ev.rating && <p className="text-xs text-amber-600 font-medium">⭐ {ev.rating} {ev.reviewSource ? `· ${ev.reviewSource}` : ""}</p>}
-                            </div>
-                            {ev.location && <p className="text-xs text-muted-foreground truncate">🗺️ {ev.location}</p>}
-                            {ev.notes && <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{ev.notes}</p>}
-                          </div>
-                        </div>
-                        <div className="border-t border-border/40 px-4 py-2.5 flex items-center justify-end">
-                          <button
-                            onClick={() => addNearbyEvent(ev, i)}
-                            disabled={added}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                          >
-                            {added ? "✓ Ajouté au programme" : "+ Ajouter au programme"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
           ) : (
             <TripHelp destination={trip.destination} apiBase="" />
