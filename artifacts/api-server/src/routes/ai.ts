@@ -253,24 +253,42 @@ router.post("/ai/transit", async (req, res) => {
   try {
     const { from, to, city } = req.body as { from: string; to: string; city: string };
 
-    const prompt = `Tu es un expert en transports en commun. Donne l'itinéraire en transports en commun pour aller de "${from}" à "${to}" dans la ville / région de "${city}".
+    const prompt = `Tu es un expert mondial en transports en commun. Donne l'itinéraire RÉEL et DÉTAILLÉ en transports en commun pour aller de "${from}" à "${to}" dans la ville / région de "${city}".
+
+RÈGLES IMPORTANTES :
+- Utilise les VRAIES lignes de transport qui existent à ${city} (numéros de lignes réels, noms d'opérateurs réels : RATP, SNCF, TfL, MTA, BVG, STM, etc.)
+- Donne les VRAIS noms des arrêts et stations du réseau local
+- Indique la direction (terminus) de chaque ligne pour que le voyageur ne se trompe pas
+- Estime la durée de marche entre arrêts et temps d'attente moyen
+- Si le trajet nécessite une correspondance, détaille chaque étape
+- Si la ville n'a pas de transports en commun connus, propose le meilleur moyen disponible (taxi, Uber, etc.)
+- Pour les modes : utilise "metro", "bus", "tram", "rer", "train", "marche", "ferry", "cable", "autre"
 
 Réponds UNIQUEMENT en JSON valide sans markdown :
 {
-  "summary": "Résumé en 1 phrase (ex: Bus 42 → Métro ligne 3, ~25 min)",
-  "totalDuration": "25 min",
+  "summary": "Résumé concis (ex: Métro ligne 4 dir. Montrouge → Bus 63, ~28 min)",
+  "totalDuration": "28 min",
   "steps": [
     {
-      "mode": "bus" | "metro" | "tram" | "rer" | "train" | "marche" | "autre",
-      "emoji": "🚌",
-      "line": "42",
-      "from": "Arrêt de départ",
-      "to": "Arrêt d'arrivée",
-      "duration": "8 min",
-      "instruction": "Prendre le bus 42 direction Centre-Ville"
+      "mode": "marche",
+      "emoji": "🚶",
+      "line": null,
+      "from": "Rue de départ exacte",
+      "to": "Station / Arrêt le plus proche",
+      "duration": "3 min",
+      "instruction": "Marcher jusqu'à la station Odéon"
+    },
+    {
+      "mode": "metro",
+      "emoji": "🚇",
+      "line": "Ligne 4 — dir. Montrouge",
+      "from": "Odéon",
+      "to": "Saint-Placide",
+      "duration": "4 min",
+      "instruction": "Prendre la ligne 4 direction Montrouge (2 arrêts)"
     }
   ],
-  "tips": "Conseil utile (ex: ticket valable 1h30, zone 1-2...)",
+  "tips": "Conseil pratique (tarif, zone, fréquence, application mobile de l'opérateur...)",
   "mapsUrl": "https://www.google.com/maps/dir/?api=1&origin=FROM&destination=TO&travelmode=transit"
 }
 
@@ -278,9 +296,13 @@ Pour mapsUrl, remplace FROM par "${encodeURIComponent(from + ", " + city)}" et T
 
     const completion = await openai.chat.completions.create({
       model: "gpt-5-mini",
-      max_completion_tokens: 1200,
+      max_completion_tokens: 1800,
       messages: [
-        { role: "system", content: "Tu es un expert en transports en commun urbains. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        {
+          role: "system",
+          content:
+            "Tu es un expert mondial en transports en commun avec une connaissance exhaustive de tous les réseaux urbains (RATP Paris, TfL Londres, MTA New York, BVG Berlin, STM Montréal, MBTA Boston, métros asiatiques, etc.). Tu connais les numéros de lignes réels, les noms des arrêts, les directions et les horaires approximatifs. Tu réponds UNIQUEMENT en JSON valide, sans markdown ni commentaire.",
+        },
         { role: "user", content: prompt },
       ],
     });
