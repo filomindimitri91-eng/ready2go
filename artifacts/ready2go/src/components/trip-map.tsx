@@ -172,8 +172,17 @@ function buildGeoQuery(event: Event): string | null {
 
 // ─── Overpass POIs ─────────────────────────────────────────────────────────────
 export interface PoiItem {
-  lat: number; lon: number; name: string; emoji: string;
+  lat: number; lon: number; name: string; description: string; emoji: string;
   tags: Record<string, string>;
+}
+
+function poiDescription(tags: Record<string, string>): string {
+  if (tags.tourism === "museum")      return "Musée";
+  if (tags.tourism === "viewpoint")   return "Point de vue";
+  if (tags.tourism === "attraction")  return "Attraction touristique";
+  if (tags.historic === "castle")     return "Château historique";
+  if (tags.historic === "church")     return "Église historique";
+  return "";
 }
 
 async function fetchPOIs(lat: number, lon: number): Promise<PoiItem[]> {
@@ -196,13 +205,18 @@ async function fetchPOIs(lat: number, lon: number): Promise<PoiItem[]> {
     const items: PoiItem[] = [];
     for (const el of (data.elements ?? []).slice(0, 15)) {
       const tags: Record<string, string> = el.tags ?? {};
-      const name = tags.name || tags["name:fr"] || "Point d'intérêt";
+      // Skip POIs without a real name
+      const realName = tags.name || tags["name:fr"];
+      if (!realName) continue;
+      const description = poiDescription(tags);
+      // Skip POIs without a meaningful description
+      if (!description) continue;
       const emoji = tags.tourism === "museum" ? "🖼️"
         : tags.tourism === "viewpoint" ? "🌅"
         : tags.historic === "castle" ? "🏰"
         : tags.historic === "church" ? "⛪"
         : "🏛️";
-      items.push({ lat: el.lat, lon: el.lon, name, emoji, tags });
+      items.push({ lat: el.lat, lon: el.lon, name: realName, description, emoji, tags });
     }
     return items;
   } catch { return []; }
@@ -473,7 +487,7 @@ export function TripMap({
           });
 
           // Always bind popup for browse mode
-          marker.bindPopup(`<b>${poi.emoji} ${poi.name}</b><br><i>Point d'intérêt</i>`);
+          marker.bindPopup(`<b>${poi.emoji} ${poi.name}</b><br><i>${poi.description}</i>`);
 
           // Dynamic click handler: reads current refs at click time
           marker.on("click", (e) => {
