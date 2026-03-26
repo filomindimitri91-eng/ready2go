@@ -25,7 +25,7 @@ import {
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
-import { LodgingForm, LodgingSubmitData } from "@/components/lodging-form";
+import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -272,6 +272,8 @@ interface LodgingData {
   dormType?: string;
   bedNumber?: string;
   breakfastIncluded?: boolean;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
   attachmentName?: string;
   attachmentUrl?: string;
   notes?: string;
@@ -286,8 +288,12 @@ function LodgingCard({ event, onDelete }: { event: Event & { lodgingData?: Lodgi
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const fullAddress = [ld?.address, ld?.city, ld?.country].filter(Boolean).join(", ");
-  const mapsUrl = fullAddress ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}` : null;
-  const wazeUrl = fullAddress ? `https://waze.com/ul?q=${encodeURIComponent(fullAddress)}&navigate=yes` : null;
+  const mapsUrl = fullAddress
+    ? getMapsUrl(ld?.address ?? "", ld?.city ?? "", ld?.country ?? "", ld?.latitude, ld?.longitude)
+    : null;
+  const wazeUrl = fullAddress
+    ? getWazeUrl(ld?.address ?? "", ld?.city ?? "", ld?.country ?? "", ld?.latitude, ld?.longitude)
+    : null;
 
   return (
     <Card className={cn("overflow-hidden border-l-4", meta.colorClass.split(" ")[2])}>

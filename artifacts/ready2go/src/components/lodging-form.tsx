@@ -19,6 +19,44 @@ const LODGING_TYPES = [
 const BOOKING_PROVIDERS = ["Booking.com", "Expedia", "Hotels.com", "Agoda", "Airbnb", "HRS", "Réservation directe", "Autre"];
 const RENTAL_PLATFORMS  = ["Airbnb", "Vrbo", "Abritel", "HomeAway", "Gîtes de France", "Location directe", "Autre"];
 
+// ─── Navigation URL helpers ───────────────────────────────────────────────────
+// Priority: GPS coordinates → full address string. Both are mobile-compatible
+// (deep-link format opens the native Maps / Waze app on iOS and Android).
+
+export function getMapsUrl(
+  address: string,
+  city: string,
+  country: string,
+  lat?: string | number | null,
+  lng?: string | number | null,
+): string {
+  const latStr = String(lat ?? "").trim();
+  const lngStr = String(lng ?? "").trim();
+  if (latStr && lngStr && !isNaN(Number(latStr)) && !isNaN(Number(lngStr))) {
+    // Coordinate-based deep link — opens the native Maps app on mobile
+    return `https://maps.google.com/?q=${latStr},${lngStr}`;
+  }
+  const full = [address, city, country].filter(Boolean).join(", ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(full)}`;
+}
+
+export function getWazeUrl(
+  address: string,
+  city: string,
+  country: string,
+  lat?: string | number | null,
+  lng?: string | number | null,
+): string {
+  const latStr = String(lat ?? "").trim();
+  const lngStr = String(lng ?? "").trim();
+  if (latStr && lngStr && !isNaN(Number(latStr)) && !isNaN(Number(lngStr))) {
+    // Coordinate-based deep link — opens the native Waze app on mobile
+    return `https://waze.com/ul?ll=${latStr},${lngStr}&navigate=yes`;
+  }
+  const full = [address, city, country].filter(Boolean).join(", ");
+  return `https://waze.com/ul?q=${encodeURIComponent(full)}&navigate=yes`;
+}
+
 // ─── Helper components ────────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -128,12 +166,14 @@ function FileUpload({ value, onChange }: { value: { name: string; url: string; s
   );
 }
 
-function MapsButtons({ address, city, country }: { address: string; city: string; country: string }) {
+function MapsButtons({ address, city, country, lat, lng }: {
+  address: string; city: string; country: string;
+  lat?: string | null; lng?: string | null;
+}) {
   const full = [address, city, country].filter(Boolean).join(", ");
   if (!full.trim()) return null;
-  const encoded = encodeURIComponent(full);
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
-  const wazeUrl = `https://waze.com/ul?q=${encoded}&navigate=yes`;
+  const mapsUrl = getMapsUrl(address, city, country, lat, lng);
+  const wazeUrl = getWazeUrl(address, city, country, lat, lng);
   return (
     <div className="flex gap-2 flex-wrap">
       <a
@@ -323,7 +363,7 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
             </Row2>
             {/* Maps buttons — appear once address is filled */}
             {(d.address || d.city) && (
-              <MapsButtons address={d.address} city={d.city} country={d.country} />
+              <MapsButtons address={d.address} city={d.city} country={d.country} lat={d.latitude} lng={d.longitude} />
             )}
           </Section>
 
