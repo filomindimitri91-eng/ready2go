@@ -25,7 +25,6 @@ import {
   Event
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
-import { CurrencyTab } from "@/components/currency-tab";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
@@ -924,7 +923,9 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help" | "currency">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
+  const [groupAdults, setGroupAdults] = useState(2);
+  const [groupChildren, setGroupChildren] = useState(0);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -1143,6 +1144,41 @@ export default function TripDetails() {
               </div>
             </div>
           </div>
+
+          {/* Composition du groupe */}
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
+            <span className="text-sm font-semibold text-primary-foreground/80 mr-1">Groupe :</span>
+            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2 py-1">
+              <span className="text-sm">🧑</span>
+              <button
+                type="button"
+                onClick={() => setGroupAdults(a => Math.max(0, a - 1))}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
+              >−</button>
+              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupAdults}</span>
+              <button
+                type="button"
+                onClick={() => setGroupAdults(a => Math.min(30, a + 1))}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
+              >+</button>
+              <span className="text-xs text-primary-foreground/70 ml-0.5">adulte{groupAdults > 1 ? "s" : ""}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2 py-1">
+              <span className="text-sm">👶</span>
+              <button
+                type="button"
+                onClick={() => setGroupChildren(c => Math.max(0, c - 1))}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
+              >−</button>
+              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupChildren}</span>
+              <button
+                type="button"
+                onClick={() => setGroupChildren(c => Math.min(20, c + 1))}
+                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
+              >+</button>
+              <span className="text-xs text-primary-foreground/70 ml-0.5">enfant{groupChildren > 1 ? "s" : ""}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1185,7 +1221,6 @@ export default function TripDetails() {
             { id: "program",  emoji: "📅", label: "Programme" },
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
-            { id: "currency", emoji: "💱", label: "Convertir" },
             { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
@@ -1412,10 +1447,9 @@ export default function TripDetails() {
               startDate={trip.startDate}
               endDate={trip.endDate}
               events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title, pricePerPerson: e.pricePerPerson ?? null })) ?? []}
+              adults={groupAdults}
+              children={groupChildren}
             />
-
-          ) : activeTab === "currency" ? (
-            <CurrencyTab />
 
           ) : activeTab === "deplacer" ? (
             <DeplacerTab destination={trip.destination} />

@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Loader2, RefreshCw, Users, ChevronDown, ChevronUp, Coins } from "lucide-react";
-import { TOP_CURRENCIES, CURRENCY_MAP, fmtCurrency } from "@/components/currency-tab";
+import { Loader2, RefreshCw, ChevronDown, ChevronUp, Coins } from "lucide-react";
+import { CURRENCIES, fmtCurrency, CurrencyTab } from "@/components/currency-tab";
 
 interface BudgetCategory {
   key: string;
@@ -24,6 +24,7 @@ interface EventItem {
 }
 
 interface EventCostRow {
+  type: string;
   title: string;
   basePrice: number;
   adultPrice: number;
@@ -37,6 +38,8 @@ interface Props {
   startDate: string;
   endDate: string;
   events: EventItem[];
+  adults: number;
+  children: number;
 }
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#06b6d4"];
@@ -45,6 +48,10 @@ const fmt = (n: number, currency = "EUR") => fmtCurrency(n, currency);
 
 const EVENT_EMOJI: Record<string, string> = {
   activite: "🎯", transport: "🚌", logement: "🏨", restauration: "🍽️", reunion: "👥", autre: "📍",
+};
+const EVENT_LABEL: Record<string, string> = {
+  activite: "Activités", transport: "Transport", logement: "Logement",
+  restauration: "Restauration", reunion: "Réunion", autre: "Autre",
 };
 
 function PriceToggleRow({
@@ -70,6 +77,44 @@ function PriceToggleRow({
         <span className="text-sm font-medium truncate flex-1">{row.title}</span>
         <span className="text-sm font-bold text-primary shrink-0">{fmt(lineTotal, currency)}</span>
       </div>
+
+      {/* Quick free buttons */}
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange({ adultFree: true, childFree: true })}
+          className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+            row.adultFree && row.childFree
+              ? "border-green-500 bg-green-50 text-green-700"
+              : "border-border bg-background text-muted-foreground hover:border-green-400"
+          }`}
+        >
+          ✓ Gratuit pour tous
+        </button>
+        {children > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange({ childFree: true, adultFree: false })}
+            className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+              row.childFree && !row.adultFree
+                ? "border-blue-400 bg-blue-50 text-blue-700"
+                : "border-border bg-background text-muted-foreground hover:border-blue-300"
+            }`}
+          >
+            Gratuit enfants
+          </button>
+        )}
+        {(row.adultFree || row.childFree) && (
+          <button
+            type="button"
+            onClick={() => onChange({ adultFree: false, childFree: false })}
+            className="px-2 py-0.5 rounded-md text-[10px] font-bold border border-border bg-background text-muted-foreground hover:border-red-300 ml-auto"
+          >
+            Payant
+          </button>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         {/* Adults */}
         <div className="space-y-1">
@@ -136,15 +181,15 @@ function PriceToggleRow({
   );
 }
 
-export function BudgetTab({ destination, startDate, endDate, events }: Props) {
-  const [adults, setAdults] = useState(2);
-  const [children, setChildren] = useState(0);
+export function BudgetTab({ destination, startDate, endDate, events, adults, children }: Props) {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
+  const [showConverter, setShowConverter] = useState(false);
 
   const pricedEvents = events.filter(e => e.pricePerPerson !== null && e.pricePerPerson !== undefined);
 
   const [eventRows, setEventRows] = useState<EventCostRow[]>(() =>
     pricedEvents.map(e => ({
+      type: e.type,
       title: e.title,
       basePrice: e.pricePerPerson!,
       adultPrice: e.pricePerPerson!,
@@ -158,11 +203,26 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
     setEventRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
   };
 
+  const totalParticipants = adults + children;
+
   const eventTotal = eventRows.reduce((sum, row) => {
     const a = row.adultFree ? 0 : row.adultPrice * adults;
     const c = row.childFree ? 0 : row.childPrice * children;
     return sum + a + c;
   }, 0);
+
+  const eventChartData = useMemo(() => {
+    const byType: Record<string, number> = {};
+    eventRows.forEach(row => {
+      const total = (row.adultFree ? 0 : row.adultPrice * adults) +
+                    (row.childFree ? 0 : row.childPrice * children);
+      if (total > 0) byType[row.type] = (byType[row.type] ?? 0) + total;
+    });
+    return Object.entries(byType).map(([type, value]) => ({
+      name: `${EVENT_EMOJI[type] ?? "📍"} ${EVENT_LABEL[type] ?? type}`,
+      value,
+    }));
+  }, [eventRows, adults, children]);
 
   const [budget, setBudget] = useState<Budget | null>(null);
   const [loading, setLoading] = useState(false);
@@ -170,8 +230,6 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
   const [edited, setEdited] = useState<Record<string, number>>({});
   const [showAI, setShowAI] = useState(false);
   const [customNotes, setCustomNotes] = useState("");
-
-  const totalParticipants = adults + children;
 
   const generate = useCallback(async () => {
     setLoading(true);
@@ -200,7 +258,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
   const aiTotal = categories.reduce((sum, c) => sum + getAmount(c), 0);
   const currency = budget?.currency ?? selectedCurrency;
 
-  const chartData = categories.map((c) => ({
+  const aiChartData = categories.map((c) => ({
     name: `${c.emoji} ${c.label}`,
     value: getAmount(c),
   }));
@@ -208,84 +266,42 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
   return (
     <div className="space-y-5">
 
-      {/* ── Participants ── */}
-      <div className="bg-card border border-border/50 rounded-2xl px-4 py-4 space-y-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <Users className="w-3.5 h-3.5" /> Participants
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
-            <span className="text-base">🧑</span>
-            <label className="text-xs text-muted-foreground font-medium flex-1">Adultes</label>
-            <input
-              type="number"
-              min={0}
-              max={30}
-              value={adults}
-              onChange={e => setAdults(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-10 text-sm font-bold text-center bg-transparent focus:outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
-            <span className="text-base">👶</span>
-            <label className="text-xs text-muted-foreground font-medium flex-1">Enfants</label>
-            <input
-              type="number"
-              min={0}
-              max={20}
-              value={children}
-              onChange={e => setChildren(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-10 text-sm font-bold text-center bg-transparent focus:outline-none"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground text-center">
-          {totalParticipants} participant{totalParticipants > 1 ? "s" : ""} au total
-        </p>
+      {/* ── Devise (compact dropdown) ── */}
+      <div className="bg-card border border-border/50 rounded-2xl px-4 py-3 flex items-center gap-3">
+        <Coins className="w-4 h-4 text-muted-foreground shrink-0" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex-1">Devise</span>
+        <select
+          value={selectedCurrency}
+          onChange={e => { setSelectedCurrency(e.target.value); setBudget(null); }}
+          className="text-sm font-bold border border-border rounded-xl px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+        >
+          {CURRENCIES.map(c => (
+            <option key={c.code} value={c.code}>
+              {c.flag} {c.code} — {c.label}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* ── Devise ── */}
-      <div className="bg-card border border-border/50 rounded-2xl px-4 py-4 space-y-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <Coins className="w-3.5 h-3.5" /> Devise du voyage
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {TOP_CURRENCIES.map(code => {
-            const c = CURRENCY_MAP[code];
-            if (!c) return null;
-            return (
-              <button
-                key={code}
-                type="button"
-                onClick={() => { setSelectedCurrency(code); setBudget(null); }}
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  selectedCurrency === code
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {c.flag} {code}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Les montants et l'estimation IA seront affichés en {selectedCurrency}.
-        </p>
-      </div>
-
-      {/* ── Coûts des événements ── */}
+      {/* ── Coûts réels des événements ── */}
       {pricedEvents.length > 0 ? (
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
-            Coûts des événements
-          </p>
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Coûts des événements
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {adults} adulte{adults > 1 ? "s" : ""}{children > 0 ? ` · ${children} enfant${children > 1 ? "s" : ""}` : ""}
+            </p>
+          </div>
+
           {eventRows.length !== pricedEvents.length && (
             <button
               type="button"
               onClick={() =>
                 setEventRows(
                   pricedEvents.map(e => ({
+                    type: e.type,
                     title: e.title,
                     basePrice: e.pricePerPerson!,
                     adultPrice: e.pricePerPerson!,
@@ -300,6 +316,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
               Rafraîchir depuis les événements
             </button>
           )}
+
           {eventRows.map((row, i) => (
             <PriceToggleRow
               key={i}
@@ -311,7 +328,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
             />
           ))}
 
-          {/* Total événements */}
+          {/* Total réel */}
           <div className="bg-primary/5 border border-primary/20 rounded-2xl px-5 py-4">
             <div className="flex items-center justify-between">
               <div>
@@ -324,13 +341,44 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
               <span className="text-4xl">💰</span>
             </div>
           </div>
+
+          {/* Graphique par catégorie */}
+          {eventChartData.length > 1 && (
+            <div className="bg-background border border-border/50 rounded-2xl p-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                Répartition par poste
+              </p>
+              <ResponsiveContainer width="100%" height={190}>
+                <PieChart>
+                  <Pie
+                    data={eventChartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={75}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {eventChartData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(v: number) => fmt(v, currency)}
+                    contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 13 }}
+                  />
+                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center py-8 bg-card border border-dashed rounded-2xl">
           <p className="text-3xl mb-2">🎟️</p>
-          <p className="font-semibold text-sm text-foreground">Aucun événement avec un prix</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-            Ajoutez un prix par personne dans vos événements (activités, transports, etc.) pour calculer le coût total automatiquement.
+          <p className="text-sm font-semibold text-foreground mb-1">Aucun événement avec prix</p>
+          <p className="text-xs text-muted-foreground">
+            Ajoutez un prix à vos événements pour voir le calcul ici.
           </p>
         </div>
       )}
@@ -396,12 +444,12 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
                   </div>
                 </div>
 
-                {chartData.length > 0 && (
+                {aiChartData.length > 0 && (
                   <div className="bg-background border border-border/50 rounded-2xl p-4">
                     <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
                         <Pie
-                          data={chartData}
+                          data={aiChartData}
                           cx="50%"
                           cy="50%"
                           innerRadius={50}
@@ -409,7 +457,7 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
                           paddingAngle={3}
                           dataKey="value"
                         >
-                          {chartData.map((_, i) => (
+                          {aiChartData.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
@@ -471,6 +519,27 @@ export function BudgetTab({ destination, startDate, endDate, events }: Props) {
           </div>
         )}
       </div>
+
+      {/* ── Convertisseur de devises (repliable) ── */}
+      <div className="border border-border/60 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setShowConverter(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-card hover:bg-muted/40 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">💱</span>
+            <span className="text-sm font-semibold text-foreground">Convertisseur de devises</span>
+          </div>
+          {showConverter ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </button>
+        {showConverter && (
+          <div className="bg-card border-t border-border/40">
+            <CurrencyTab />
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
