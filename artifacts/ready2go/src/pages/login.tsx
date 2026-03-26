@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { PlaneTakeoff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCreateUser } from "@workspace/api-client-react";
 import { Button, Input, Label } from "@/components/ui-elements";
+import logoImg from "@assets/1774511272544_1774511318297.png";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -52,14 +53,15 @@ export default function Login() {
         className="relative z-10 w-full max-w-sm"
       >
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center p-4 bg-primary/10 rounded-3xl mb-6 text-primary shadow-inner">
-            <PlaneTakeoff className="w-12 h-12" />
+          <div className="flex justify-center mb-4">
+            <img
+              src={logoImg}
+              alt="Ready2Go logo"
+              className="w-52 h-auto mix-blend-multiply"
+            />
           </div>
-          <h1 className="text-4xl font-extrabold text-foreground tracking-tight mb-2">
-            Ready2Go
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Planifiez vos voyages en groupe, <br/>sans prise de tête.
+          <p className="text-base font-semibold text-primary/80 italic tracking-wide">
+            Ensemble, on va plus loin
           </p>
         </div>
 

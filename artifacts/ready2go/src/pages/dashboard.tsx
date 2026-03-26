@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Plus, Users, CalendarDays, MapPin, LogOut, Loader2, Compass } from "lucide-react";
+import logoImg from "@assets/1774511272544_1774511318297.png";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth-context";
@@ -162,10 +163,7 @@ export default function Dashboard() {
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-              <Compass className="w-5 h-5" />
-            </div>
-            <h1 className="text-xl font-bold text-foreground">Ready2Go</h1>
+            <img src={logoImg} alt="Ready2Go" className="h-9 w-auto" />
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-muted-foreground hidden sm:inline-block">

@@ -33,6 +33,7 @@ import { TripMap, PoiClickData } from "@/components/trip-map";
 import type { ActiviteInitialVenue } from "@/components/activite-form";
 import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
+import logoImg from "@assets/1774511272544_1774511318297.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -933,14 +934,24 @@ export default function TripDetails() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <div className="bg-primary text-primary-foreground pt-12 pb-6 px-4 rounded-b-[2.5rem] shadow-xl relative">
+      <div className="bg-primary text-primary-foreground pt-10 pb-6 px-4 rounded-b-[2.5rem] shadow-xl relative">
         <div className="max-w-3xl mx-auto">
-          <Link href="/">
-            <button className="flex items-center text-primary-foreground/80 hover:text-white mb-4 transition-colors">
-              <ChevronLeft className="w-5 h-5 mr-1" />
-              Retour
-            </button>
-          </Link>
+          {/* Top row: back + logo */}
+          <div className="flex items-center justify-between mb-4">
+            <Link href="/">
+              <button className="flex items-center text-primary-foreground/80 hover:text-white transition-colors">
+                <ChevronLeft className="w-5 h-5 mr-1" />
+                Retour
+              </button>
+            </Link>
+            <div className="flex flex-col items-end gap-0.5">
+              <img src={logoImg} alt="Ready2Go" className="h-8 w-auto brightness-0 invert" />
+              <span className="text-[10px] text-primary-foreground/70 italic font-medium tracking-wide">
+                Ensemble, on va plus loin
+              </span>
+            </div>
+          </div>
+
           <div className="flex justify-between items-start mb-4">
             <div>
               <h1 className="text-3xl font-extrabold mb-1 leading-tight">{trip.name}</h1>
@@ -954,8 +965,7 @@ export default function TripDetails() {
               </div>
             </div>
           </div>
-
-            </div>
+        </div>
       </div>
 
       {/* ── Interactive map ─ own section below header ─────────────────── */}
