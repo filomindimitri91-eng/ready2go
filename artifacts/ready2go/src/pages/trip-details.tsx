@@ -29,7 +29,7 @@ import { TransportForm, TransportSubmitData } from "@/components/transport-form"
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
 import { ActiviteForm, ActiviteSubmitData, ACTIVITE_EMOJI, ACTIVITE_LABEL } from "@/components/activite-form";
-import { TripMap, PoiClickData } from "@/components/trip-map";
+import { TripMap, PoiClickData, MemberLocation } from "@/components/trip-map";
 import type { ActiviteInitialVenue } from "@/components/activite-form";
 import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
@@ -786,7 +786,7 @@ function StandardCard({ event, onDelete }: { event: Event; onDelete: () => void 
 export default function TripDetails() {
   const [, params] = useRoute("/voyage/:id");
   const tripId = parseInt(params?.id || "0", 10);
-  const { userId } = useAuth();
+  const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"program" | "group" | "help">("program");
@@ -797,6 +797,64 @@ export default function TripDetails() {
   const [pendingPoiVenue, setPendingPoiVenue] = useState<PoiClickData | null>(null);
   const [navPoi, setNavPoi] = useState<PoiClickData | null>(null);
   const [mapSelectMode, setMapSelectMode] = useState(false);
+
+  // ─── Member location sharing ─────────────────────────────────────────────
+  const [memberLocations, setMemberLocations] = useState<MemberLocation[]>([]);
+  const [isSharing, setIsSharing] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
+  const sharingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchMemberLocations = async () => {
+    try {
+      const res = await fetch(`/api/trips/${trip.id}/locations`);
+      if (res.ok) setMemberLocations(await res.json());
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchMemberLocations();
+    pollIntervalRef.current = setInterval(fetchMemberLocations, 30_000);
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, [trip.id]);
+
+  const startSharing = () => {
+    if (!navigator.geolocation) { setLocError("Géolocalisation non disponible"); return; }
+    setLocError(null);
+    const sendLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          fetch(`/api/trips/${trip.id}/location`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, username, lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          }).then(() => fetchMemberLocations());
+        },
+        () => setLocError("Impossible d'obtenir votre position"),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    };
+    sendLocation();
+    sharingIntervalRef.current = setInterval(sendLocation, 30_000);
+    setIsSharing(true);
+  };
+
+  const stopSharing = () => {
+    if (sharingIntervalRef.current) { clearInterval(sharingIntervalRef.current); sharingIntervalRef.current = null; }
+    fetch(`/api/trips/${trip.id}/location`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    }).then(() => fetchMemberLocations());
+    setIsSharing(false);
+  };
+
+  useEffect(() => () => {
+    if (sharingIntervalRef.current) clearInterval(sharingIntervalRef.current);
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+  }, []);
 
   const handlePoiClick = (poi: PoiClickData) => {
     if (mapSelectMode) {
@@ -888,11 +946,8 @@ export default function TripDetails() {
                 Retour
               </button>
             </Link>
-            <div className="flex flex-col items-end gap-0.5">
-              <img src={logoImg} alt="Ready2Go" className="h-8 w-auto brightness-0 invert" />
-              <span className="text-[10px] text-primary-foreground/70 italic font-medium tracking-wide">
-                Ensemble, on va plus loin
-              </span>
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl px-2 py-1">
+              <img src={logoImg} alt="Ready2Go" className="h-7 w-auto" />
             </div>
           </div>
 
@@ -931,6 +986,8 @@ export default function TripDetails() {
           activeEventType={addEventType}
           focusedEventId={focusedEventId}
           onPoiClick={handlePoiClick}
+          memberLocations={memberLocations}
+          myUserId={userId ?? undefined}
         />
         {focusedEventId && (
           <button
@@ -970,7 +1027,7 @@ export default function TripDetails() {
               activeTab === "help" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            🆘 Besoin d'aide
+            🤖 Assistant
           </button>
         </div>
 
@@ -1056,43 +1113,75 @@ export default function TripDetails() {
               )}
             </div>
           ) : activeTab === "group" ? (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Invite Code */}
-              <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-1">Code d'invitation</h3>
-                  <p className="text-muted-foreground text-sm">Partagez ce code pour inviter des amis.</p>
+                  <p className="text-xs font-semibold text-primary uppercase tracking-wider">Code d'invitation</p>
+                  <p className="text-2xl font-mono font-bold tracking-widest text-foreground mt-0.5">{trip.inviteCode}</p>
                 </div>
                 <button
                   onClick={handleCopyCode}
-                  className="flex items-center gap-3 bg-background border border-primary/20 px-4 py-2 rounded-xl hover:shadow-md transition-all group"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-2 rounded-xl transition-colors shrink-0"
                 >
-                  <span className="text-2xl font-mono font-bold tracking-widest text-foreground group-hover:text-primary transition-colors">
-                    {trip.inviteCode}
-                  </span>
-                  {copied
-                    ? <CheckCircle2 className="w-5 h-5 text-blue-500" />
-                    : <Copy className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  }
+                  {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copied ? "Copié !" : "Copier"}
                 </button>
-              </Card>
+              </div>
+
+              {/* Location sharing */}
+              <div className="bg-card border border-border/50 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-sm">📍 Position en direct</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {memberLocations.length > 0
+                        ? `${memberLocations.length} membre${memberLocations.length > 1 ? "s" : ""} visible${memberLocations.length > 1 ? "s" : ""} sur la carte`
+                        : "Aucune position partagée"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={isSharing ? stopSharing : startSharing}
+                    className={`shrink-0 flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-xl transition-colors ${
+                      isSharing
+                        ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                        : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    }`}
+                  >
+                    {isSharing ? "⏹ Arrêter" : "📡 Partager ma position"}
+                  </button>
+                </div>
+                {locError && <p className="text-xs text-red-500">{locError}</p>}
+                {memberLocations.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
+                    {memberLocations.map((loc) => (
+                      <span key={loc.userId} className="flex items-center gap-1.5 text-xs bg-secondary/60 rounded-lg px-2.5 py-1">
+                        <span className="w-2 h-2 rounded-full bg-primary inline-block" />
+                        {loc.username}{loc.userId === userId ? " (moi)" : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Members */}
-              <h3 className="text-lg font-bold text-foreground">Participants ({trip.members.length})</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {trip.members.map((member) => (
-                  <div key={member.id} className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border/50">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center font-bold shadow-sm">
-                      {member.username.charAt(0).toUpperCase()}
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground mb-2">Participants ({trip.members.length})</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {trip.members.map((member) => (
+                    <div key={member.id} className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border/50">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                        {member.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">{member.username} {member.userId === trip.creatorId && "👑"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(parseISO(member.joinedAt), "dd MMM yyyy", { locale: fr })}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold">{member.username} {member.userId === trip.creatorId && "👑"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        A rejoint le {format(parseISO(member.joinedAt), "dd MMM", { locale: fr })}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           ) : (

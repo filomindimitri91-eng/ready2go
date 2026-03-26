@@ -39,6 +39,43 @@ const CreateEventBody = z.object({
 
 const router: IRouter = Router();
 
+// ─── In-memory location store (ephemeral, TTL 2 min) ─────────────────────────
+type LocEntry = { userId: number; username: string; lat: number; lng: number; updatedAt: number };
+const tripLocs = new Map<number, Map<number, LocEntry>>();
+const LOC_TTL = 2 * 60 * 1000;
+
+router.post("/trips/:tripId/location", (req, res) => {
+  const tripId = parseInt(req.params.tripId);
+  const { userId, username, lat, lng } = req.body;
+  if (!tripId || !userId || lat == null || lng == null) {
+    res.status(400).json({ error: "Données manquantes" });
+    return;
+  }
+  if (!tripLocs.has(tripId)) tripLocs.set(tripId, new Map());
+  tripLocs.get(tripId)!.set(Number(userId), { userId: Number(userId), username: String(username), lat: Number(lat), lng: Number(lng), updatedAt: Date.now() });
+  res.json({ ok: true });
+});
+
+router.delete("/trips/:tripId/location", (req, res) => {
+  const tripId = parseInt(req.params.tripId);
+  const userId = Number(req.body?.userId);
+  tripLocs.get(tripId)?.delete(userId);
+  res.json({ ok: true });
+});
+
+router.get("/trips/:tripId/locations", (req, res) => {
+  const tripId = parseInt(req.params.tripId);
+  const now = Date.now();
+  const locs = tripLocs.get(tripId);
+  if (!locs) { res.json([]); return; }
+  const active = [...locs.values()].filter(l => now - l.updatedAt < LOC_TTL);
+  // Clean up stale
+  for (const [uid, l] of locs.entries()) {
+    if (now - l.updatedAt >= LOC_TTL) locs.delete(uid);
+  }
+  res.json(active);
+});
+
 function generateInviteCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";

@@ -225,6 +225,13 @@ const ANIM_STYLE = `
 }
 `;
 
+export interface MemberLocation {
+  userId: number;
+  username: string;
+  lat: number;
+  lng: number;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 interface TripMapProps {
   events: Event[];
@@ -234,6 +241,28 @@ interface TripMapProps {
   activeEventType?: string;
   focusedEventId?: string | null;
   onPoiClick?: (poi: PoiClickData) => void;
+  memberLocations?: MemberLocation[];
+  myUserId?: number;
+}
+
+const MEMBER_COLORS = ["#3b82f6","#8b5cf6","#f59e0b","#10b981","#ef4444","#06b6d4","#f97316"];
+
+function memberMarkerIcon(username: string, colorIdx: number, isMe: boolean): L.DivIcon {
+  const color = MEMBER_COLORS[colorIdx % MEMBER_COLORS.length];
+  const initial = username.charAt(0).toUpperCase();
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width:32px;height:32px;border-radius:50%;
+      background:${color};border:3px solid ${isMe ? "#fff" : "rgba(255,255,255,0.8)"};
+      display:flex;align-items:center;justify-content:center;
+      color:#fff;font-weight:700;font-size:13px;font-family:sans-serif;
+      box-shadow:0 2px 8px rgba(0,0,0,0.3);
+      ${isMe ? "outline:3px solid " + color + "88;" : ""}
+    ">${initial}</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
 }
 
 export function TripMap({
@@ -244,9 +273,12 @@ export function TripMap({
   activeEventType,
   focusedEventId,
   onPoiClick,
+  memberLocations = [],
+  myUserId,
 }: TripMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<L.Map | null>(null);
+  const memberMarkersRef = useRef<Map<number, L.Marker>>(new Map());
 
   // Tour state
   const tourStepsRef      = useRef<TourStep[]>([]);
@@ -288,6 +320,41 @@ export function TripMap({
   useEffect(() => { mapSelectModeRef.current   = mapSelectMode;   }, [mapSelectMode]);
   useEffect(() => { activeEventTypeRef.current = activeEventType; }, [activeEventType]);
   useEffect(() => { onPoiClickRef.current      = onPoiClick;      }, [onPoiClick]);
+
+  // ─── Member location markers ─────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const existing = memberMarkersRef.current;
+    const currentIds = new Set(memberLocations.map(l => l.userId));
+
+    // Remove stale markers
+    for (const [uid, marker] of existing.entries()) {
+      if (!currentIds.has(uid)) {
+        marker.remove();
+        existing.delete(uid);
+      }
+    }
+
+    // Add / update markers
+    memberLocations.forEach((loc, idx) => {
+      const isMe = loc.userId === myUserId;
+      const icon = memberMarkerIcon(loc.username, idx, isMe);
+      const tooltip = `${loc.username}${isMe ? " (moi)" : ""}`;
+
+      const existing_marker = existing.get(loc.userId);
+      if (existing_marker) {
+        existing_marker.setLatLng([loc.lat, loc.lng]);
+        existing_marker.setIcon(icon);
+      } else {
+        const marker = L.marker([loc.lat, loc.lng], { icon, zIndexOffset: 1000 })
+          .bindTooltip(tooltip, { permanent: false, direction: "top", offset: [0, -16] })
+          .addTo(map);
+        existing.set(loc.userId, marker);
+      }
+    });
+  }, [memberLocations, myUserId]);
 
   // ─── Map initialization ─────────────────────────────────────────────────
   useEffect(() => {

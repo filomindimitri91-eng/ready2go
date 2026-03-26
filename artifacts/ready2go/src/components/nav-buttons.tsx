@@ -30,15 +30,17 @@ export function NavButtons({ mapsUrl, wazeUrl, size = "sm", onClick, className }
 
   const iconSize = size === "lg" ? "w-4 h-4" : "w-3.5 h-3.5";
 
+  const wrapperCls = size === "lg" ? "flex gap-3 w-full" : "flex gap-1.5 flex-wrap";
+
   return (
-    <>
+    <div className={cn(wrapperCls, size === "lg" && className)}>
       {mapsUrl && (
         <a
           href={mapsUrl}
           target="_blank"
           rel="noopener noreferrer"
           onClick={onClick}
-          className={cn(base, "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100", className)}
+          className={cn(base, "bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100", size === "sm" && className)}
         >
           <GoogleMapsIcon className={iconSize} />
           Google Maps
@@ -50,12 +52,12 @@ export function NavButtons({ mapsUrl, wazeUrl, size = "sm", onClick, className }
           target="_blank"
           rel="noopener noreferrer"
           onClick={onClick}
-          className={cn(base, "bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100", className)}
+          className={cn(base, "bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100", size === "sm" && className)}
         >
           <WazeIcon className={iconSize} />
           Waze
         </a>
       )}
-    </>
+    </div>
   );
 }
