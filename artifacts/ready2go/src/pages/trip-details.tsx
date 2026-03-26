@@ -515,6 +515,19 @@ interface RestaurationData {
   menuUrl?: string;
   menuSummary?: string;
   notes?: string;
+  avgMenuPrice?: number | null;
+  priceRange?: string;
+  priceLevel?: string;
+  priceSource?: string;
+}
+
+interface RestaurantPriceResult {
+  avgMenuPrice: number | null;
+  priceRange: string;
+  currency: string;
+  priceLevel: string;
+  source: string;
+  details: string;
 }
 
 function RestaurantCard({ event, onDelete, onEdit }: { event: Event & { restaurationData?: RestaurationData | null }; onDelete: () => void; onEdit: () => void }) {
@@ -527,6 +540,37 @@ function RestaurantCard({ event, onDelete, onEdit }: { event: Event & { restaura
   const fullAddress = [rd?.address, rd?.city, rd?.country].filter(Boolean).join(", ");
   const mapsUrl = fullAddress ? getMapsUrl(rd?.address ?? "", rd?.city ?? "", rd?.country ?? "", rd?.latitude, rd?.longitude) : null;
   const wazeUrl = fullAddress ? getWazeUrl(rd?.address ?? "", rd?.city ?? "", rd?.country ?? "", rd?.latitude, rd?.longitude) : null;
+
+  const [aiPrice, setAiPrice] = useState<RestaurantPriceResult | null>(
+    rd?.avgMenuPrice != null ? {
+      avgMenuPrice: rd.avgMenuPrice,
+      priceRange: rd.priceRange ?? "",
+      currency: "EUR",
+      priceLevel: rd.priceLevel ?? "?",
+      source: rd.priceSource ?? "Estimation",
+      details: "",
+    } : null
+  );
+  const [fetchingPrice, setFetchingPrice] = useState(false);
+
+  const fetchPrice = async () => {
+    if (!rd?.name || !rd?.city) return;
+    setFetchingPrice(true);
+    try {
+      const res = await fetch("/api/ai/restaurant-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: rd.name, city: rd.city, country: rd.country ?? "", cuisine: rd.cuisine, restoType: rt }),
+      });
+      if (!res.ok) throw new Error();
+      const data: RestaurantPriceResult = await res.json();
+      setAiPrice(data);
+    } catch {
+      setAiPrice({ avgMenuPrice: null, priceRange: "Non disponible", currency: "EUR", priceLevel: "?", source: "Estimation", details: "Impossible de récupérer le prix." });
+    } finally {
+      setFetchingPrice(false);
+    }
+  };
 
   return (
     <Card className={cn("overflow-hidden border-l-4", meta.colorClass.split(" ")[2])}>
@@ -608,6 +652,60 @@ function RestaurantCard({ event, onDelete, onEdit }: { event: Event & { restaura
         <p className="text-sm text-foreground/80 mt-3 bg-secondary/30 p-3 rounded-lg border border-secondary/50">
           {event.notes}
         </p>
+      )}
+
+      {/* Prix moyen estimé */}
+      {rd?.name && rd?.city && (
+        <div className="mt-3">
+          {!aiPrice && !fetchingPrice && (
+            <button
+              type="button"
+              onClick={fetchPrice}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+            >
+              <span>🔍</span> Prix moyen du menu
+            </button>
+          )}
+          {fetchingPrice && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-amber-50/60 border border-amber-100 rounded-xl px-3 py-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span>Recherche du prix sur TripAdvisor, Google…</span>
+            </div>
+          )}
+          {aiPrice && !fetchingPrice && (
+            <div className="bg-amber-50/70 border border-amber-200/60 rounded-xl px-3 py-2.5 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base leading-none">{aiPrice.priceLevel}</span>
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">
+                      {aiPrice.avgMenuPrice != null
+                        ? `~${aiPrice.avgMenuPrice} ${aiPrice.currency} / pers.`
+                        : "Prix non disponible"}
+                    </p>
+                    {aiPrice.priceRange && (
+                      <p className="text-[11px] text-amber-700/70">{aiPrice.priceRange}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={fetchPrice}
+                  title="Rafraîchir"
+                  className="text-amber-500 hover:text-amber-700 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
+              </div>
+              {aiPrice.details && (
+                <p className="text-[11px] text-amber-700/80 leading-snug">{aiPrice.details}</p>
+              )}
+              <p className="text-[10px] text-amber-500 flex items-center gap-1">
+                <span>🤖</span> Source estimée : {aiPrice.source}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Navigation + menu link row */}

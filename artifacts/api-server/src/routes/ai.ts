@@ -158,9 +158,15 @@ FORMAT JSON (tableau plat d'événements) :
     "location": "Adresse complète et précise",
     "rating": "4.X/5",
     "reviewSource": "TripAdvisor" | "Google Maps" | "Lonely Planet" | "Le Routard" | "Time Out" | "Michelin",
-    "notes": "Pourquoi y aller, spécialités, ambiance, conseil de réservation"
+    "notes": "Pourquoi y aller, spécialités, ambiance, conseil de réservation",
+    "avgMenuPrice": 35,
+    "priceRange": "25€ – 45€",
+    "priceLevel": "€€",
+    "priceSource": "TripAdvisor"
   }
-]`;
+]
+
+RÈGLE PRIX : Pour les événements de type "restauration", TOUJOURS remplir avgMenuPrice (nombre entier en EUR), priceRange, priceLevel et priceSource. Ces champs sont OBLIGATOIRES pour les restaurants. Pour les autres types, omettre ces champs.`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-5-mini",
@@ -247,6 +253,75 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
     res.json(budget);
   } catch (err: any) {
     console.error("[ai/budget]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
+// POST /api/ai/restaurant-price
+// Body: { name, city, country, cuisine?, restoType? }
+// Returns: { avgMenuPrice, priceRange, currency, source, priceLevel }
+router.post("/ai/restaurant-price", async (req, res) => {
+  try {
+    const { name, city, country, cuisine, restoType } = req.body as {
+      name: string;
+      city: string;
+      country: string;
+      cuisine?: string;
+      restoType?: string;
+    };
+
+    if (!name || !city) {
+      res.status(400).json({ error: "name et city sont requis" });
+      return;
+    }
+
+    const restoDesc = [restoType, cuisine].filter(Boolean).join(", ") || "restaurant";
+
+    const prompt = `Tu es un expert gastronomique et tu connais parfaitement les prix des restaurants dans le monde entier. Tu t'appuies sur TripAdvisor, Google Maps, TheFork, les sites officiels des restaurants et les guides gastronomiques.
+
+RESTAURANT : "${name}"
+VILLE : ${city}${country ? `, ${country}` : ""}
+TYPE : ${restoDesc}
+
+MISSION : Estime le prix moyen d'un menu complet (plat principal + éventuellement entrée/dessert) dans ce restaurant. Si tu connais ce restaurant précisément, donne les prix réels. Sinon, estime selon le type d'établissement et la ville.
+
+Réponds UNIQUEMENT en JSON valide sans markdown :
+{
+  "avgMenuPrice": 25,
+  "priceRange": "20€ – 35€",
+  "currency": "EUR",
+  "priceLevel": "€€",
+  "source": "TripAdvisor" | "Google Maps" | "TheFork" | "Site officiel" | "Estimation",
+  "details": "1 phrase expliquant la fourchette (ex: plat principal entre 18€ et 28€, menus à 35€)"
+}
+
+NIVEAUX DE PRIX :
+- € : moins de 15€/pers (street food, fast food)
+- €€ : 15€ – 35€/pers (restaurant classique)
+- €€€ : 35€ – 70€/pers (restaurant gastronomique)
+- €€€€ : plus de 70€/pers (haute gastronomie)`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 600,
+      messages: [
+        { role: "system", content: "Tu es un expert en gastronomie mondiale. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let result: any = {};
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      result = JSON.parse(cleaned);
+    } catch {
+      result = { avgMenuPrice: null, priceRange: "Non disponible", currency: "EUR", priceLevel: "?", source: "Estimation", details: "" };
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[ai/restaurant-price]", err);
     res.status(500).json({ error: err?.message ?? "Erreur serveur" });
   }
 });
