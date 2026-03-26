@@ -288,4 +288,77 @@ Pour mapsUrl, remplace FROM par "${encodeURIComponent(from + ", " + city)}" et T
   }
 });
 
+// POST /api/ai/events-nearby
+// Body: { destination, startDate, endDate }
+// Returns: { events: [{type, title, date, startTime, endTime, location, venue, distance, rating, reviewSource, notes, category}] }
+router.post("/ai/events-nearby", async (req, res) => {
+  try {
+    const { destination, startDate, endDate } = req.body as {
+      destination: string;
+      startDate: string;
+      endDate: string;
+    };
+
+    const prompt = `Tu es un expert en événements culturels et touristiques. Liste les VRAIS événements notables qui se déroulent (ou qui ont lieu chaque année à cette période) dans un rayon de 50 km autour de "${destination}" entre le ${startDate} et le ${endDate}.
+
+TYPES D'ÉVÉNEMENTS À INCLURE :
+- Concerts et spectacles (artistes connus, salles réputées)
+- Événements sportifs (matchs, compétitions, tournois)
+- Festivals culturels ou musicaux
+- Carnavals, fêtes locales et célébrations traditionnelles
+- Marchés exceptionnels (Noël, artisanat, gastronomie)
+- Expositions temporaires majeures
+- Spectacles en plein air
+
+RÈGLES :
+1. Propose des événements RÉELS ou récurrents à cette période de l'année (fêtes nationales, festivals annuels, etc.) — si les dates exactes sont inconnues, utilise une estimation cohérente dans la plage du voyage
+2. Indique le lieu PRÉCIS (nom de la salle, stade, place) avec son adresse
+3. Estime la distance depuis ${destination} (en km)
+4. Inclus une note de popularité / avis
+5. Génère entre 6 et 12 événements variés
+6. Réponds UNIQUEMENT en JSON valide, sans markdown
+
+FORMAT JSON ATTENDU :
+[
+  {
+    "category": "concert" | "sport" | "festival" | "carnaval" | "marché" | "exposition" | "spectacle" | "fête",
+    "title": "Nom précis de l'événement",
+    "venue": "Nom du lieu (ex: Stade de France, Palais des Congrès)",
+    "date": "YYYY-MM-DD",
+    "startTime": "HH:MM",
+    "endTime": "HH:MM",
+    "location": "Adresse complète",
+    "distance": "12 km",
+    "rating": "4.6/5",
+    "reviewSource": "TripAdvisor" | "Google" | "Notoriété locale",
+    "notes": "Description de l'événement, artiste, équipe, ambiance, billetterie",
+    "type": "activite"
+  }
+]`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5-mini",
+      max_completion_tokens: 3000,
+      messages: [
+        { role: "system", content: "Tu es un expert en événements culturels et touristiques. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "[]";
+    let events: any[] = [];
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+      events = JSON.parse(cleaned);
+    } catch {
+      events = [];
+    }
+
+    res.json({ events });
+  } catch (err: any) {
+    console.error("[ai/events-nearby]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
 export default router;

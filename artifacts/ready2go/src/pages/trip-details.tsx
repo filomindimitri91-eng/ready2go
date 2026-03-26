@@ -791,7 +791,7 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "events" | "help">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -899,6 +899,50 @@ export default function TripDetails() {
     } catch {} finally {
       setChatSending(false);
     }
+  };
+
+  // ─── À ne pas rater — Nearby Events ──────────────────────────────────────
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyEvents, setNearbyEvents] = useState<any[] | null>(null);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [nearbyAdded, setNearbyAdded] = useState<Set<number>>(new Set());
+  const nearbyFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (activeTab === "events" && !nearbyFetchedRef.current && trip) {
+      nearbyFetchedRef.current = true;
+      setNearbyLoading(true);
+      setNearbyError(null);
+      fetch("/api/ai/events-nearby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+          setNearbyEvents(data.events ?? []);
+        })
+        .catch(() => setNearbyError("Impossible de charger les événements. Réessayez."))
+        .finally(() => setNearbyLoading(false));
+    }
+  }, [activeTab, trip]);
+
+  const addNearbyEvent = (ev: any, idx: number) => {
+    createEventMutation.mutate({
+      tripId,
+      data: {
+        type: ev.type ?? "activite",
+        title: ev.venue ? `${ev.title} — ${ev.venue}` : ev.title,
+        date: ev.date,
+        startTime: ev.startTime ?? null,
+        endTime: ev.endTime ?? null,
+        location: ev.location ?? null,
+        notes: [ev.notes, ev.distance ? `Distance : ${ev.distance}` : null, ev.rating ? `Note : ${ev.rating} (${ev.reviewSource ?? "avis"})` : null].filter(Boolean).join(" · ") || null,
+        creatorId: userId!,
+      } as any,
+    });
+    setNearbyAdded((prev) => new Set([...prev, idx]));
   };
 
   // ─── AI Program Generator ─────────────────────────────────────────────────
@@ -1103,6 +1147,7 @@ export default function TripDetails() {
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
             { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
+            { id: "events",   emoji: "🎉", label: "À ne pas rater" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
             <button
@@ -1385,6 +1430,100 @@ export default function TripDetails() {
 
           ) : activeTab === "deplacer" ? (
             <DeplacerTab destination={trip.destination} />
+
+          ) : activeTab === "events" ? (
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">🎉 À ne pas rater</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Événements dans un rayon de 50 km · {trip.startDate} → {trip.endDate}
+                  </p>
+                </div>
+                {nearbyEvents && (
+                  <button
+                    onClick={() => { nearbyFetchedRef.current = false; setNearbyEvents(null); setNearbyAdded(new Set()); setNearbyLoading(true); setNearbyError(null);
+                      fetch("/api/ai/events-nearby", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }) })
+                        .then(r => r.json()).then(d => { if (d.error) throw new Error(d.error); setNearbyEvents(d.events ?? []); }).catch(() => setNearbyError("Erreur. Réessayez.")).finally(() => setNearbyLoading(false));
+                    }}
+                    className="text-xs text-primary font-semibold hover:underline shrink-0"
+                  >🔄 Actualiser</button>
+                )}
+              </div>
+
+              {/* Loading */}
+              {nearbyLoading && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Recherche des événements à proximité…</p>
+                </div>
+              )}
+
+              {/* Error */}
+              {nearbyError && !nearbyLoading && (
+                <div className="text-center py-10 text-sm text-red-500">{nearbyError}</div>
+              )}
+
+              {/* Empty */}
+              {!nearbyLoading && nearbyEvents && nearbyEvents.length === 0 && (
+                <div className="text-center py-16 bg-card border border-dashed rounded-3xl">
+                  <p className="text-4xl mb-3">🎭</p>
+                  <h3 className="text-lg font-bold mb-1">Aucun événement trouvé</h3>
+                  <p className="text-muted-foreground text-sm">Aucun événement notable identifié pour ces dates.</p>
+                </div>
+              )}
+
+              {/* Events list */}
+              {!nearbyLoading && nearbyEvents && nearbyEvents.length > 0 && (
+                <div className="space-y-3">
+                  {nearbyEvents.map((ev, i) => {
+                    const added = nearbyAdded.has(i);
+                    const categoryEmoji: Record<string, string> = {
+                      concert: "🎵", sport: "🏆", festival: "🎪", carnaval: "🎭",
+                      marché: "🛒", exposition: "🖼️", spectacle: "🎬", fête: "🎊",
+                    };
+                    const emoji = categoryEmoji[ev.category] ?? "🎉";
+                    return (
+                      <div key={i} className={cn("bg-card border border-border/50 rounded-2xl overflow-hidden transition-opacity", added ? "opacity-60" : "")}>
+                        <div className="flex items-start gap-3 p-4">
+                          <span className="text-2xl flex-shrink-0 mt-0.5">{emoji}</span>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-sm leading-tight">{ev.title}</p>
+                                {ev.venue && <p className="text-xs text-primary font-medium mt-0.5">{ev.venue}</p>}
+                              </div>
+                              {ev.category && (
+                                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                  {ev.category}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                              {ev.date && <p className="text-xs text-muted-foreground">📅 {ev.date}{ev.startTime ? ` · ${ev.startTime}${ev.endTime ? ` – ${ev.endTime}` : ""}` : ""}</p>}
+                              {ev.distance && <p className="text-xs text-muted-foreground">📍 {ev.distance}</p>}
+                              {ev.rating && <p className="text-xs text-amber-600 font-medium">⭐ {ev.rating} {ev.reviewSource ? `· ${ev.reviewSource}` : ""}</p>}
+                            </div>
+                            {ev.location && <p className="text-xs text-muted-foreground truncate">🗺️ {ev.location}</p>}
+                            {ev.notes && <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{ev.notes}</p>}
+                          </div>
+                        </div>
+                        <div className="border-t border-border/40 px-4 py-2.5 flex items-center justify-end">
+                          <button
+                            onClick={() => addNearbyEvent(ev, i)}
+                            disabled={added}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            {added ? "✓ Ajouté au programme" : "+ Ajouter au programme"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
           ) : (
             <TripHelp destination={trip.destination} apiBase="" />
