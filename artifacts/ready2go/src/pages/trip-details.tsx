@@ -32,6 +32,7 @@ import { ActiviteForm, ActiviteSubmitData, ACTIVITE_EMOJI, ACTIVITE_LABEL } from
 import { TripMap, PoiClickData } from "@/components/trip-map";
 import type { ActiviteInitialVenue } from "@/components/activite-form";
 import type { RestaurationInitialVenue } from "@/components/restauration-form";
+import { TripHelp } from "@/components/help/trip-help";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -843,7 +844,7 @@ export default function TripDetails() {
   const { userId } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "help">("program");
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
@@ -985,20 +986,29 @@ export default function TripDetails() {
           <button
             onClick={() => setActiveTab("program")}
             className={cn(
-              "flex-1 py-3 text-sm font-semibold rounded-xl transition-all",
+              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
               activeTab === "program" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            Programme
+            📅 Programme
           </button>
           <button
             onClick={() => setActiveTab("group")}
             className={cn(
-              "flex-1 py-3 text-sm font-semibold rounded-xl transition-all",
+              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
               activeTab === "group" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            Groupe & Infos
+            👥 Groupe
+          </button>
+          <button
+            onClick={() => setActiveTab("help")}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-semibold rounded-xl transition-all",
+              activeTab === "help" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            🆘 Aide
           </button>
         </div>
 
@@ -1083,7 +1093,7 @@ export default function TripDetails() {
                 ))
               )}
             </div>
-          ) : (
+          ) : activeTab === "group" ? (
             <div className="space-y-6">
               {/* Invite Code */}
               <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1123,6 +1133,8 @@ export default function TripDetails() {
                 ))}
               </div>
             </div>
+          ) : (
+            <TripHelp destination={trip.destination} apiBase="" />
           )}
         </motion.div>
       </main>
