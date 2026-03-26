@@ -806,8 +806,9 @@ export default function TripDetails() {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchMemberLocations = async () => {
+    if (!tripId) return;
     try {
-      const res = await fetch(`/api/trips/${trip.id}/locations`);
+      const res = await fetch(`/api/trips/${tripId}/locations`);
       if (res.ok) setMemberLocations(await res.json());
     } catch {}
   };
@@ -818,7 +819,7 @@ export default function TripDetails() {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [trip.id]);
+  }, [tripId]);
 
   const startSharing = () => {
     if (!navigator.geolocation) { setLocError("Géolocalisation non disponible"); return; }
@@ -826,7 +827,7 @@ export default function TripDetails() {
     const sendLocation = () => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          fetch(`/api/trips/${trip.id}/location`, {
+          fetch(`/api/trips/${tripId}/location`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, username, lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -843,7 +844,7 @@ export default function TripDetails() {
 
   const stopSharing = () => {
     if (sharingIntervalRef.current) { clearInterval(sharingIntervalRef.current); sharingIntervalRef.current = null; }
-    fetch(`/api/trips/${trip.id}/location`, {
+    fetch(`/api/trips/${tripId}/location`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
