@@ -194,6 +194,7 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
   const [priceInput, setPriceInput] = useState("");
   const [isFree, setIsFree] = useState(false);
   const [priceType, setPriceType] = useState("per_person");
+  const [ticketType, setTicketType] = useState<"aller_simple" | "aller_retour">("aller_simple");
 
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
 
@@ -210,6 +211,7 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
   const showPickupReturn  = tt === "carRental";
   const showTimes         = tt !== "" && !["carRental"].includes(tt);
   const requireArrival    = tt !== "" && !["taxi", "metro"].includes(tt);
+  const showTicketType    = ["plane", "train", "bus", "ferry"].includes(tt);
 
   const locationOptions = getLocationOptions(tt);
 
@@ -228,6 +230,7 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
     if (!tt) return;
     const transportData: Record<string, unknown> = {
       ...d,
+      ticketType: showTicketType ? ticketType : null,
       attachmentName: attachment?.name ?? null,
       attachmentUrl: attachment?.url ?? null,
     };
@@ -452,6 +455,31 @@ export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, 
 
           {/* Siège & Billet */}
           <Section title="Siège & Billet">
+            {showTicketType && (
+              <div>
+                <Label className="mb-1">Type de billet</Label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "aller_simple", label: "Aller simple", emoji: "→" },
+                    { value: "aller_retour", label: "Aller-retour", emoji: "⇄" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setTicketType(opt.value as "aller_simple" | "aller_retour")}
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-xl border-2 text-xs font-semibold transition-all",
+                        ticketType === opt.value
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                      )}
+                    >
+                      {opt.emoji} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {showSeat && (
               <TextInput
                 label={tt === "train" ? "Siège / Voiture" : tt === "ferry" ? "Cabine / Siège" : "Siège"}

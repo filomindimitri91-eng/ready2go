@@ -1443,10 +1443,17 @@ export default function TripDetails() {
 
           ) : activeTab === "budget" ? (
             <BudgetTab
+              tripId={tripId}
               destination={trip.destination}
               startDate={trip.startDate}
               endDate={trip.endDate}
-              events={(trip.events as any[])?.map((e: any) => ({ type: e.type, title: e.title, pricePerPerson: e.pricePerPerson ?? null })) ?? []}
+              events={(trip.events as any[])?.map((e: any) => ({
+                type: e.type,
+                title: e.title,
+                pricePerPerson: e.pricePerPerson ?? null,
+                priceType: e.priceType ?? null,
+                extraData: e.transportData ?? e.logementData ?? undefined,
+              })) ?? []}
               adults={groupAdults}
               children={groupChildren}
             />

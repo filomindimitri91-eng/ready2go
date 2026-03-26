@@ -1,7 +1,10 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Loader2, RefreshCw, ChevronDown, ChevronUp, Coins } from "lucide-react";
 import { CURRENCIES, fmtCurrency, CurrencyTab } from "@/components/currency-tab";
+import { cn } from "@/lib/utils";
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
 
 interface BudgetCategory {
   key: string;
@@ -21,6 +24,8 @@ interface EventItem {
   type: string;
   title: string;
   pricePerPerson: number | null;
+  priceType: string | null;
+  extraData?: Record<string, unknown>;
 }
 
 interface EventCostRow {
@@ -31,9 +36,14 @@ interface EventCostRow {
   childPrice: number;
   adultFree: boolean;
   childFree: boolean;
+  priceType: string;
+  ticketType: string;
+  priceMode: string;
+  nights: number;
 }
 
 interface Props {
+  tripId: number;
   destination: string;
   startDate: string;
   endDate: string;
@@ -41,6 +51,8 @@ interface Props {
   adults: number;
   children: number;
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444", "#06b6d4"];
 
@@ -53,6 +65,59 @@ const EVENT_LABEL: Record<string, string> = {
   activite: "Activités", transport: "Transport", logement: "Logement",
   restauration: "Restauration", reunion: "Réunion", autre: "Autre",
 };
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function calcRowTotal(row: EventCostRow, adults: number, children: number): number {
+  const ticketFactor = row.ticketType === "aller_retour" ? 2 : 1;
+  const nightsFactor = (row.priceMode === "per_night" && row.nights > 1) ? row.nights : 1;
+
+  if (row.priceType === "per_group") {
+    return row.adultFree ? 0 : row.adultPrice * ticketFactor * nightsFactor;
+  }
+  if (row.priceType === "per_adult") {
+    return row.adultFree ? 0 : row.adultPrice * adults * ticketFactor * nightsFactor;
+  }
+  if (row.priceType === "per_child") {
+    return row.childFree ? 0 : row.childPrice * children * ticketFactor * nightsFactor;
+  }
+  if (row.priceType === "per_couple") {
+    const couples = Math.max(1, Math.ceil(adults / 2));
+    return row.adultFree ? 0 : row.adultPrice * couples * ticketFactor * nightsFactor;
+  }
+  // per_person (default)
+  const a = row.adultFree ? 0 : row.adultPrice * adults * ticketFactor * nightsFactor;
+  const c = row.childFree ? 0 : row.childPrice * children * ticketFactor * nightsFactor;
+  return a + c;
+}
+
+function makeRowFromEvent(e: EventItem): EventCostRow {
+  const isFree = e.pricePerPerson === 0;
+  const extra = e.extraData ?? {};
+  return {
+    type: e.type,
+    title: e.title,
+    basePrice: e.pricePerPerson!,
+    adultPrice: e.pricePerPerson!,
+    childPrice: e.pricePerPerson!,
+    adultFree: isFree,
+    childFree: isFree,
+    priceType: e.priceType ?? "per_person",
+    ticketType: (extra.ticketType as string) ?? "aller_simple",
+    priceMode: (extra.priceMode as string) ?? "per_stay",
+    nights: typeof extra.nights === "number" ? extra.nights : 1,
+  };
+}
+
+function rowFactorLabel(row: EventCostRow, adults: number): string {
+  const parts: string[] = [];
+  if (row.ticketType === "aller_retour") parts.push("A/R ×2");
+  if (row.priceMode === "per_night" && row.nights > 1) parts.push(`${row.nights} nuits`);
+  if (row.priceType === "per_couple") parts.push(`${Math.max(1, Math.ceil(adults / 2))} couple${Math.max(1, Math.ceil(adults / 2)) > 1 ? "s" : ""}`);
+  return parts.join(" · ");
+}
+
+// ── PriceToggleRow ────────────────────────────────────────────────────────────
 
 function PriceToggleRow({
   row,
@@ -67,15 +132,45 @@ function PriceToggleRow({
   onChange: (r: Partial<EventCostRow>) => void;
   currency?: string;
 }) {
-  const adultTotal = row.adultFree ? 0 : row.adultPrice * adults;
-  const childTotal = row.childFree ? 0 : row.childPrice * children;
-  const lineTotal = adultTotal + childTotal;
+  const lineTotal = calcRowTotal(row, adults, children);
+  const factorLabel = rowFactorLabel(row, adults);
+  const isPerGroup = row.priceType === "per_group";
+  const isPerAdult = row.priceType === "per_adult";
+  const isPerChild = row.priceType === "per_child";
+  const isPerCouple = row.priceType === "per_couple";
+
+  const priceTypeLabel: Record<string, string> = {
+    per_person: "👤 Par personne", per_adult: "🧑 Par adulte", per_child: "👶 Par enfant",
+    per_couple: "💑 Par couple", per_group: "👥 Pour le groupe",
+  };
 
   return (
     <div className="bg-card border border-border/50 rounded-xl p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium truncate flex-1">{row.title}</span>
-        <span className="text-sm font-bold text-primary shrink-0">{fmt(lineTotal, currency)}</span>
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-medium truncate block">{row.title}</span>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="text-[10px] text-muted-foreground bg-muted/60 rounded-md px-1.5 py-0.5">
+              {priceTypeLabel[row.priceType] ?? row.priceType}
+            </span>
+            {row.priceMode === "per_night" && row.nights > 1 && (
+              <span className="text-[10px] text-blue-600 bg-blue-50 rounded-md px-1.5 py-0.5">
+                🌙 {row.nights} nuits
+              </span>
+            )}
+            {row.ticketType === "aller_retour" && (
+              <span className="text-[10px] text-violet-600 bg-violet-50 rounded-md px-1.5 py-0.5">
+                ⇄ Aller-retour
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <span className="text-sm font-bold text-primary block">{fmt(lineTotal, currency)}</span>
+          {factorLabel && (
+            <span className="text-[10px] text-muted-foreground">{factorLabel}</span>
+          )}
+        </div>
       </div>
 
       {/* Quick free buttons */}
@@ -91,7 +186,7 @@ function PriceToggleRow({
         >
           ✓ Gratuit pour tous
         </button>
-        {children > 0 && (
+        {!isPerGroup && !isPerAdult && !isPerChild && !isPerCouple && children > 0 && (
           <button
             type="button"
             onClick={() => onChange({ childFree: true, adultFree: false })}
@@ -115,23 +210,26 @@ function PriceToggleRow({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {/* Adults */}
+      {/* Price inputs — adapt layout to priceType */}
+      {isPerGroup ? (
+        /* ── Per group: single price field ── */
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Adultes ({adults})</span>
-          </div>
+          <span className="text-xs text-muted-foreground">
+            Prix total du groupe
+            {row.ticketType === "aller_retour" ? " × 2 (A/R)" : ""}
+            {row.priceMode === "per_night" && row.nights > 1 ? ` × ${row.nights} nuits` : ""}
+          </span>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onChange({ adultFree: !row.adultFree })}
+              onClick={() => onChange({ adultFree: !row.adultFree, childFree: !row.adultFree })}
               className={`shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
                 row.adultFree
                   ? "border-green-500 bg-green-50 text-green-700"
                   : "border-border bg-background text-muted-foreground hover:border-green-400"
               }`}
             >
-              {row.adultFree ? "✓ Gratuit" : "Gratuit"}
+              {row.adultFree ? "✓ Inclus" : "Inclus"}
             </button>
             {!row.adultFree && (
               <input
@@ -140,64 +238,118 @@ function PriceToggleRow({
                 step={0.01}
                 value={row.adultPrice}
                 onChange={e => onChange({ adultPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                className="w-20 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             )}
             {!row.adultFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
           </div>
         </div>
-        {/* Children */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Enfants ({children})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onChange({ childFree: !row.childFree })}
-              className={`shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-                row.childFree
-                  ? "border-green-500 bg-green-50 text-green-700"
-                  : "border-border bg-background text-muted-foreground hover:border-green-400"
-              }`}
-            >
-              {row.childFree ? "✓ Gratuit" : "Gratuit"}
-            </button>
-            {!row.childFree && (
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={row.childPrice}
-                onChange={e => onChange({ childPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
+      ) : (
+        /* ── Per person / adult / child / couple ── */
+        <div className="grid grid-cols-2 gap-2">
+          {/* Adults column */}
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">
+              {isPerCouple
+                ? `Couples (${Math.max(1, Math.ceil(adults / 2))})`
+                : `Adultes (${adults})`}
+            </span>
+            {isPerChild ? (
+              <span className="text-xs text-green-600 font-semibold">✓ Inclus</span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onChange({ adultFree: !row.adultFree })}
+                  className={`shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                    row.adultFree
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-400"
+                  }`}
+                >
+                  {row.adultFree ? "✓ Gratuit" : "Gratuit"}
+                </button>
+                {!row.adultFree && (
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={row.adultPrice}
+                    onChange={e => onChange({ adultPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                )}
+                {!row.adultFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
+              </div>
             )}
-            {!row.childFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
+          </div>
+          {/* Children column */}
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Enfants ({children})</span>
+            {isPerAdult || isPerCouple ? (
+              <span className="text-xs text-green-600 font-semibold">✓ Inclus</span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onChange({ childFree: !row.childFree })}
+                  className={`shrink-0 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                    row.childFree
+                      ? "border-green-500 bg-green-50 text-green-700"
+                      : "border-border bg-background text-muted-foreground hover:border-green-400"
+                  }`}
+                >
+                  {row.childFree ? "✓ Gratuit" : "Gratuit"}
+                </button>
+                {!row.childFree && (
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={row.childPrice}
+                    onChange={e => onChange({ childPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    className="w-16 text-right text-xs font-bold border border-border rounded-lg px-2 py-1 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  />
+                )}
+                {!row.childFree && <span className="text-[10px] text-muted-foreground">{currency}</span>}
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-export function BudgetTab({ destination, startDate, endDate, events, adults, children }: Props) {
+// ── BudgetTab ─────────────────────────────────────────────────────────────────
+
+export function BudgetTab({ tripId, destination, startDate, endDate, events, adults, children }: Props) {
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [showConverter, setShowConverter] = useState(false);
 
   const pricedEvents = events.filter(e => e.pricePerPerson !== null && e.pricePerPerson !== undefined);
 
-  const [eventRows, setEventRows] = useState<EventCostRow[]>(() =>
-    pricedEvents.map(e => ({
-      type: e.type,
-      title: e.title,
-      basePrice: e.pricePerPerson!,
-      adultPrice: e.pricePerPerson!,
-      childPrice: e.pricePerPerson!,
-      adultFree: e.pricePerPerson === 0,
-      childFree: e.pricePerPerson === 0,
-    }))
-  );
+  const STORAGE_KEY = `budget_rows_${tripId}`;
+
+  const [eventRows, setEventRows] = useState<EventCostRow[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed: EventCostRow[] = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length === pricedEvents.length) {
+          const matched = parsed.every((r, i) => r.title === pricedEvents[i].title && r.type === pricedEvents[i].type);
+          if (matched) return parsed;
+        }
+      }
+    } catch {}
+    return pricedEvents.map(makeRowFromEvent);
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(eventRows));
+    } catch {}
+  }, [eventRows, STORAGE_KEY]);
 
   const updateRow = (i: number, patch: Partial<EventCostRow>) => {
     setEventRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
@@ -205,17 +357,12 @@ export function BudgetTab({ destination, startDate, endDate, events, adults, chi
 
   const totalParticipants = adults + children;
 
-  const eventTotal = eventRows.reduce((sum, row) => {
-    const a = row.adultFree ? 0 : row.adultPrice * adults;
-    const c = row.childFree ? 0 : row.childPrice * children;
-    return sum + a + c;
-  }, 0);
+  const eventTotal = eventRows.reduce((sum, row) => sum + calcRowTotal(row, adults, children), 0);
 
   const eventChartData = useMemo(() => {
     const byType: Record<string, number> = {};
     eventRows.forEach(row => {
-      const total = (row.adultFree ? 0 : row.adultPrice * adults) +
-                    (row.childFree ? 0 : row.childPrice * children);
+      const total = calcRowTotal(row, adults, children);
       if (total > 0) byType[row.type] = (byType[row.type] ?? 0) + total;
     });
     return Object.entries(byType).map(([type, value]) => ({
@@ -298,19 +445,7 @@ export function BudgetTab({ destination, startDate, endDate, events, adults, chi
           {eventRows.length !== pricedEvents.length && (
             <button
               type="button"
-              onClick={() =>
-                setEventRows(
-                  pricedEvents.map(e => ({
-                    type: e.type,
-                    title: e.title,
-                    basePrice: e.pricePerPerson!,
-                    adultPrice: e.pricePerPerson!,
-                    childPrice: e.pricePerPerson!,
-                    adultFree: e.pricePerPerson === 0,
-                    childFree: e.pricePerPerson === 0,
-                  }))
-                )
-              }
+              onClick={() => setEventRows(pricedEvents.map(makeRowFromEvent))}
               className="text-xs text-primary underline"
             >
               Rafraîchir depuis les événements

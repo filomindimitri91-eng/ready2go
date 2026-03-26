@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Loader2, Upload, X, Paperclip, Search } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
@@ -489,6 +489,13 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
   const [priceInput, setPriceInput] = useState("");
   const [isFree, setIsFree] = useState(false);
   const [priceType, setPriceType] = useState("per_person");
+  const [priceMode, setPriceMode] = useState<"per_night" | "per_stay">("per_night");
+
+  const nights = useMemo(() => {
+    if (!d.checkInDate || !d.checkOutDate) return null;
+    const diff = (new Date(d.checkOutDate).getTime() - new Date(d.checkInDate).getTime()) / 86400000;
+    return Math.max(1, Math.round(diff));
+  }, [d.checkInDate, d.checkOutDate]);
 
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
 
@@ -540,6 +547,8 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
     const lodgingData: Record<string, unknown> = {
       ...d,
       breakfastIncluded,
+      priceMode,
+      nights: nights ?? 1,
       attachmentName: attachment?.name ?? null,
       attachmentUrl: attachment?.url ?? null,
       attachmentSize: attachment?.size ?? null,
@@ -732,6 +741,39 @@ export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, is
               priceType={priceType}
               onPriceTypeChange={setPriceType}
             />
+            {!isFree && priceInput !== "" && (
+              <div className="space-y-2">
+                <Label className="mb-1">Période de facturation</Label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "per_night", label: "Par nuit", emoji: "🌙" },
+                    { value: "per_stay", label: "Séjour complet", emoji: "🏨" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPriceMode(opt.value as "per_night" | "per_stay")}
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-xl border-2 text-xs font-semibold transition-all",
+                        priceMode === opt.value
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                      )}
+                    >
+                      {opt.emoji} {opt.label}
+                      {opt.value === "per_night" && nights !== null && (
+                        <span className="ml-1 font-normal opacity-70">({nights} nuit{nights > 1 ? "s" : ""})</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {priceMode === "per_night" && nights !== null && nights > 0 && priceInput !== "" && (
+                  <p className="text-xs text-muted-foreground px-1">
+                    Total séjour (hors nb. personnes) : <strong>{(parseFloat(priceInput) * nights).toFixed(2)} €</strong>
+                  </p>
+                )}
+              </div>
+            )}
           </Section>
 
           {/* Notes */}
