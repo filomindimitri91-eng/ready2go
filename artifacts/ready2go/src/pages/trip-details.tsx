@@ -8,7 +8,7 @@ import {
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
   ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
-  RefreshCw, Pencil
+  RefreshCw, Pencil, FileDown
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -25,6 +25,7 @@ import {
   Event
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
+import { generateTripPDF } from "@/lib/trip-pdf";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
@@ -925,9 +926,11 @@ export default function TripDetails() {
 
   const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
   const [groupSize, setGroupSize] = useState(2);
+  const [groupChildren, setGroupChildren] = useState(0);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
   const [copied, setCopied] = useState(false);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [pendingPoiVenue, setPendingPoiVenue] = useState<PoiClickData | null>(null);
@@ -1145,21 +1148,19 @@ export default function TripDetails() {
           </div>
 
           {/* Composition du groupe */}
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5">
+          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5 flex-wrap">
             <span className="text-sm font-semibold text-primary-foreground/80 mr-1">Groupe :</span>
-            <div className="flex items-center gap-2 bg-white/10 rounded-xl px-3 py-1.5">
-              <button
-                type="button"
-                onClick={() => setGroupSize(n => Math.max(1, n - 1))}
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
-              >−</button>
+            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2.5 py-1">
+              <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">−</button>
               <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupSize}</span>
-              <button
-                type="button"
-                onClick={() => setGroupSize(n => Math.min(50, n + 1))}
-                className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors"
-              >+</button>
-              <span className="text-xs text-primary-foreground/70 ml-1">voyageur{groupSize > 1 ? "s" : ""}</span>
+              <button type="button" onClick={() => setGroupSize(n => Math.min(50, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">+</button>
+              <span className="text-xs text-primary-foreground/70 ml-1">adulte{groupSize > 1 ? "s" : ""}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2.5 py-1">
+              <button type="button" onClick={() => setGroupChildren(n => Math.max(0, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">−</button>
+              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupChildren}</span>
+              <button type="button" onClick={() => setGroupChildren(n => Math.min(20, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">+</button>
+              <span className="text-xs text-primary-foreground/70 ml-1">enfant{groupChildren > 1 ? "s" : ""}</span>
             </div>
           </div>
         </div>
@@ -1422,6 +1423,52 @@ export default function TripDetails() {
                   </button>
                 </div>
               </div>
+
+              {/* ── Exporter PDF ─────────────────────────────────────────── */}
+              <div className="bg-card border border-border/50 rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="font-semibold text-sm flex items-center gap-2">
+                      <FileDown className="w-4 h-4 text-primary" />
+                      Exporter le récapitulatif
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Téléchargez un PDF avec les événements, adresses, budget et participants.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!trip) return;
+                      setPdfGenerating(true);
+                      await new Promise(r => setTimeout(r, 50));
+                      try {
+                        generateTripPDF(
+                          {
+                            name: trip.name,
+                            destination: trip.destination,
+                            startDate: trip.startDate,
+                            endDate: trip.endDate,
+                            inviteCode: trip.inviteCode,
+                            members: trip.members,
+                            events: (trip.events ?? []) as Parameters<typeof generateTripPDF>[0]["events"],
+                          },
+                          groupSize,
+                          groupChildren
+                        );
+                      } finally {
+                        setPdfGenerating(false);
+                      }
+                    }}
+                    disabled={pdfGenerating}
+                    className="shrink-0 flex items-center gap-2 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 px-4 py-2 rounded-xl transition-colors"
+                  >
+                    {pdfGenerating
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Génération…</>
+                      : <><FileDown className="w-4 h-4" /> Télécharger PDF</>
+                    }
+                  </button>
+                </div>
+              </div>
             </div>
 
           ) : activeTab === "budget" ? (
@@ -1437,7 +1484,7 @@ export default function TripDetails() {
                 priceType: e.priceType ?? null,
                 extraData: e.transportData ?? e.logementData ?? undefined,
               })) ?? []}
-              travelers={groupSize}
+              travelers={groupSize + groupChildren}
             />
 
           ) : activeTab === "deplacer" ? (
