@@ -1,18 +1,37 @@
 import { Router, type IRouter } from "express";
 import { db, tripsTable, tripMembersTable, usersTable, eventsTable } from "@workspace/db";
 import { eq, and, count, sql } from "drizzle-orm";
+import { z } from "zod";
 import {
   GetTripsQueryParams,
-  CreateTripBody,
   GetTripParams,
   DeleteTripParams,
   JoinTripBody,
   GetTripMembersParams,
   GetTripEventsParams,
-  CreateEventBody,
   CreateEventParams,
   DeleteEventParams,
 } from "@workspace/api-zod";
+
+const CreateTripBody = z.object({
+  name: z.string().min(1),
+  destination: z.string().min(1),
+  description: z.string().optional().nullable(),
+  startDate: z.string().min(1),
+  endDate: z.string().min(1),
+  creatorId: z.coerce.number().int(),
+});
+
+const CreateEventBody = z.object({
+  type: z.enum(["activite", "transport", "logement", "reunion", "autre"]),
+  title: z.string().min(1),
+  location: z.string().optional().nullable(),
+  date: z.string().min(1),
+  startTime: z.string().optional().nullable(),
+  endTime: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  creatorId: z.coerce.number().int(),
+});
 
 const router: IRouter = Router();
 
