@@ -901,50 +901,6 @@ export default function TripDetails() {
     }
   };
 
-  // ─── À ne pas rater — Nearby Events ──────────────────────────────────────
-  const [nearbyLoading, setNearbyLoading] = useState(false);
-  const [nearbyEvents, setNearbyEvents] = useState<any[] | null>(null);
-  const [nearbyError, setNearbyError] = useState<string | null>(null);
-  const [nearbyAdded, setNearbyAdded] = useState<Set<number>>(new Set());
-  const nearbyFetchedRef = useRef(false);
-
-  useEffect(() => {
-    if (activeTab === "events" && !nearbyFetchedRef.current && trip) {
-      nearbyFetchedRef.current = true;
-      setNearbyLoading(true);
-      setNearbyError(null);
-      fetch("/api/ai/events-nearby", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.error) throw new Error(data.error);
-          setNearbyEvents(data.events ?? []);
-        })
-        .catch(() => setNearbyError("Impossible de charger les événements. Réessayez."))
-        .finally(() => setNearbyLoading(false));
-    }
-  }, [activeTab, trip]);
-
-  const addNearbyEvent = (ev: any, idx: number) => {
-    createEventMutation.mutate({
-      tripId,
-      data: {
-        type: ev.type ?? "activite",
-        title: ev.venue ? `${ev.title} — ${ev.venue}` : ev.title,
-        date: ev.date,
-        startTime: ev.startTime ?? null,
-        endTime: ev.endTime ?? null,
-        location: ev.location ?? null,
-        notes: [ev.notes, ev.distance ? `Distance : ${ev.distance}` : null, ev.rating ? `Note : ${ev.rating} (${ev.reviewSource ?? "avis"})` : null].filter(Boolean).join(" · ") || null,
-        creatorId: userId!,
-      } as any,
-    });
-    setNearbyAdded((prev) => new Set([...prev, idx]));
-  };
-
   // ─── AI Program Generator ─────────────────────────────────────────────────
   const [programGenLoading, setProgramGenLoading] = useState(false);
   const [programGenEvents, setProgramGenEvents] = useState<any[] | null>(null);
@@ -1035,6 +991,50 @@ export default function TripDetails() {
       },
     },
   });
+
+  // ─── À ne pas rater — Nearby Events ──────────────────────────────────────
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyEvents, setNearbyEvents] = useState<any[] | null>(null);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [nearbyAdded, setNearbyAdded] = useState<Set<number>>(new Set());
+  const nearbyFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (activeTab === "events" && !nearbyFetchedRef.current && trip) {
+      nearbyFetchedRef.current = true;
+      setNearbyLoading(true);
+      setNearbyError(null);
+      fetch("/api/ai/events-nearby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destination: trip.destination, startDate: trip.startDate, endDate: trip.endDate }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) throw new Error(data.error);
+          setNearbyEvents(data.events ?? []);
+        })
+        .catch(() => setNearbyError("Impossible de charger les événements. Réessayez."))
+        .finally(() => setNearbyLoading(false));
+    }
+  }, [activeTab, trip]);
+
+  const addNearbyEvent = (ev: any, idx: number) => {
+    createEventMutation.mutate({
+      tripId,
+      data: {
+        type: ev.type ?? "activite",
+        title: ev.venue ? `${ev.title} — ${ev.venue}` : ev.title,
+        date: ev.date,
+        startTime: ev.startTime ?? null,
+        endTime: ev.endTime ?? null,
+        location: ev.location ?? null,
+        notes: [ev.notes, ev.distance ? `Distance : ${ev.distance}` : null, ev.rating ? `Note : ${ev.rating} (${ev.reviewSource ?? "avis"})` : null].filter(Boolean).join(" · ") || null,
+        creatorId: userId!,
+      } as any,
+    });
+    setNearbyAdded((prev) => new Set([...prev, idx]));
+  };
 
   const groupedEvents = useMemo(() => {
     if (!trip?.events) return {};
