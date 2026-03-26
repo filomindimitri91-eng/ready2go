@@ -27,6 +27,7 @@ import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
 import { TransportForm, TransportSubmitData } from "@/components/transport-form";
 import { LodgingForm, LodgingSubmitData, getMapsUrl, getWazeUrl } from "@/components/lodging-form";
 import { RestaurationForm, RestaurationSubmitData, RESTO_EMOJI, RESTO_LABEL } from "@/components/restauration-form";
+import { ActiviteForm, ActiviteSubmitData, ACTIVITE_EMOJI, ACTIVITE_LABEL } from "@/components/activite-form";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -39,11 +40,11 @@ function parseDateLocal(s: string): Date {
 // ─── Event type meta ──────────────────────────────────────────────────────────
 
 const EVENT_META: Record<string, { icon: React.ElementType; colorClass: string; label: string }> = {
-  activite:     { icon: Tent,             colorClass: "text-event-activite bg-event-activite/10 border-event-activite",         label: "Activité" },
-  transport:    { icon: Plane,            colorClass: "text-event-transport bg-event-transport/10 border-event-transport",       label: "Transport" },
-  logement:     { icon: HomeIcon,         colorClass: "text-event-logement bg-event-logement/10 border-event-logement",         label: "Logement" },
+  transport:    { icon: Plane,            colorClass: "text-event-transport bg-event-transport/10 border-event-transport",           label: "Transport" },
+  logement:     { icon: HomeIcon,         colorClass: "text-event-logement bg-event-logement/10 border-event-logement",             label: "Logement" },
   restauration: { icon: UtensilsCrossed,  colorClass: "text-event-restauration bg-event-restauration/10 border-event-restauration", label: "Restauration" },
-  autre:        { icon: List,             colorClass: "text-event-autre bg-event-autre/10 border-event-autre",                  label: "Autre" },
+  activite:     { icon: Tent,             colorClass: "text-event-activite bg-event-activite/10 border-event-activite",             label: "Activité" },
+  autre:        { icon: List,             colorClass: "text-event-autre bg-event-autre/10 border-event-autre",                      label: "Autre" },
   // kept for backward compat with old events
   reunion:      { icon: UtensilsCrossed,  colorClass: "text-event-restauration bg-event-restauration/10 border-event-restauration", label: "Restauration" },
 };
@@ -595,6 +596,146 @@ function RestaurantCard({ event, onDelete }: { event: Event & { restaurationData
   );
 }
 
+// ─── Activite card ────────────────────────────────────────────────────────────
+
+interface ActiviteData {
+  activiteType?: string;
+  name?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  time?: string;
+  timeEnd?: string;
+  bookingReference?: string;
+  website?: string;
+  notes?: string;
+  ticketName?: string | null;
+  ticketUrl?: string | null;
+  ticketType?: string | null;
+}
+
+function ActiviteCard({ event, onDelete }: { event: Event & { activiteData?: ActiviteData | null }; onDelete: () => void }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const ad = event.activiteData as ActiviteData | null | undefined;
+  const meta = EVENT_META.activite;
+  const at = ad?.activiteType ?? "";
+  const emoji = ACTIVITE_EMOJI[at] ?? "📍";
+  const label = ACTIVITE_LABEL[at] ?? "Activité";
+
+  const fullAddress = [ad?.address, ad?.city, ad?.country].filter(Boolean).join(", ");
+  const mapsUrl = fullAddress ? getMapsUrl(ad?.address ?? "", ad?.city ?? "", ad?.country ?? "", ad?.latitude, ad?.longitude) : null;
+  const wazeUrl = fullAddress ? getWazeUrl(ad?.address ?? "", ad?.city ?? "", ad?.country ?? "", ad?.latitude, ad?.longitude) : null;
+  const isImage = ad?.ticketType?.startsWith("image/");
+
+  return (
+    <Card className={cn("overflow-hidden border-l-4", meta.colorClass.split(" ")[2])}>
+      {/* Header */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl leading-none">{emoji}</span>
+          <span className={cn("text-xs font-semibold uppercase tracking-wider", meta.colorClass.split(" ")[0])}>
+            {label}
+          </span>
+        </div>
+        <button onClick={onDelete} className="text-muted-foreground hover:text-destructive transition-colors p-1" title="Supprimer">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Name */}
+      <h4 className="text-base font-bold mb-2">{event.title.replace(/^[^\s]+\s/, "")}</h4>
+
+      {/* Time */}
+      {(ad?.time || ad?.timeEnd) && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+          <Clock className="w-3.5 h-3.5 shrink-0" />
+          {ad.time && <span className="font-medium text-foreground">{ad.time}</span>}
+          {ad.time && ad.timeEnd && <ArrowRight className="w-3 h-3" />}
+          {ad.timeEnd && <span className="font-medium text-foreground">{ad.timeEnd}</span>}
+        </div>
+      )}
+
+      {/* Address */}
+      {fullAddress && (
+        <p className="text-sm text-muted-foreground flex items-start gap-1 mb-2">
+          <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+          {fullAddress}
+        </p>
+      )}
+
+      {/* Booking ref */}
+      {ad?.bookingReference && (
+        <div className="inline-flex items-center gap-1.5 text-xs bg-secondary/50 text-foreground px-2 py-0.5 rounded-md font-mono mb-2">
+          🎟️ Réf: {ad.bookingReference}
+        </div>
+      )}
+
+      {/* Notes */}
+      {event.notes && (
+        <p className="text-sm text-foreground/80 mt-2 bg-secondary/30 p-3 rounded-lg border border-secondary/50">
+          {event.notes}
+        </p>
+      )}
+
+      {/* Navigation + site */}
+      <div className="flex flex-wrap gap-2 mt-3">
+        {mapsUrl && (
+          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
+            <MapPin className="w-3.5 h-3.5" />Google Maps
+          </a>
+        )}
+        {wazeUrl && (
+          <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
+            🚗 Waze
+          </a>
+        )}
+        {ad?.website && (
+          <a href={ad.website} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-secondary/50 text-foreground border border-border hover:bg-secondary transition-colors">
+            <ExternalLink className="w-3.5 h-3.5" />Site web
+          </a>
+        )}
+      </div>
+
+      {/* Ticket attachment */}
+      {ad?.ticketUrl && ad?.ticketName && (
+        <div className="mt-3">
+          {isImage ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="flex items-center gap-2 text-sm text-primary font-medium hover:underline"
+              >
+                <Paperclip className="w-4 h-4" />
+                {ad.ticketName}
+              </button>
+              {previewOpen && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+                  onClick={() => setPreviewOpen(false)}
+                >
+                  <img src={ad.ticketUrl} alt={ad.ticketName} className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl" />
+                </div>
+              )}
+            </>
+          ) : (
+            <a href={ad.ticketUrl} download={ad.ticketName}
+              className="flex items-center gap-2 text-sm text-primary font-medium hover:underline">
+              <Paperclip className="w-4 h-4" />
+              {ad.ticketName}
+            </a>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ─── Standard event card ──────────────────────────────────────────────────────
 
 function StandardCard({ event, onDelete }: { event: Event; onDelete: () => void }) {
@@ -811,6 +952,11 @@ export default function TripDetails() {
                                 event={event as any}
                                 onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
                               />
+                            ) : event.type === "activite" ? (
+                              <ActiviteCard
+                                event={event as any}
+                                onDelete={() => deleteEventMutation.mutate({ tripId, eventId: event.id })}
+                              />
                             ) : (
                               <StandardCard
                                 event={event}
@@ -931,6 +1077,10 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
     onAdd(data);
   };
 
+  const handleActiviteSubmit = (data: ActiviteSubmitData) => {
+    onAdd(data);
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Ajouter au programme">
       {/* Type selector */}
@@ -985,6 +1135,15 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           tripStartDate={tripStartDate}
           tripEndDate={tripEndDate}
           onSubmit={handleRestaurationSubmit}
+          isPending={isPending}
+          onCancel={onClose}
+        />
+      ) : selectedType === "activite" ? (
+        <ActiviteForm
+          tripDate={tripStartDate}
+          tripStartDate={tripStartDate}
+          tripEndDate={tripEndDate}
+          onSubmit={handleActiviteSubmit}
           isPending={isPending}
           onCancel={onClose}
         />
