@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tripsTable } from "./trips";
@@ -14,6 +14,7 @@ export const eventsTable = pgTable("events", {
   startTime: text("start_time"),
   endTime: text("end_time"),
   notes: text("notes"),
+  transportData: jsonb("transport_data"),
   creatorId: integer("creator_id").notNull().references(() => usersTable.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

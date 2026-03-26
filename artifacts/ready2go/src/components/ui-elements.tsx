@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
@@ -93,10 +93,13 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 p-4 outline-none"
+            className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-4 outline-none"
           >
-            <div className="flex flex-col gap-4 overflow-hidden rounded-3xl bg-background p-6 text-foreground shadow-2xl border border-border">
-              <div className="flex items-center justify-between">
+            <div
+              className="flex flex-col overflow-hidden rounded-3xl bg-background text-foreground shadow-2xl border border-border"
+              style={{ maxHeight: "min(90vh, 720px)" }}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 shrink-0">
                 <h2 className="text-xl font-bold tracking-tight">{title}</h2>
                 <button
                   onClick={onClose}
@@ -105,7 +108,9 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              {children}
+              <div className="overflow-y-auto flex-1 px-6 py-5">
+                {children}
+              </div>
             </div>
           </motion.div>
         </>

@@ -31,6 +31,7 @@ const CreateEventBody = z.object({
   endTime: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   creatorId: z.coerce.number().int(),
+  transportData: z.record(z.string(), z.any()).optional().nullable(),
 });
 
 const router: IRouter = Router();
@@ -276,6 +277,7 @@ router.post("/trips/:tripId/events", async (req, res) => {
         startTime: body.startTime ?? null,
         endTime: body.endTime ?? null,
         notes: body.notes ?? null,
+        transportData: body.transportData ?? null,
         creatorId: body.creatorId,
       })
       .returning();
