@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, tripsTable, tripMembersTable, usersTable, eventsTable } from "@workspace/db";
-import { eq, and, count, sql } from "drizzle-orm";
+import { eq, and, count, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
   GetTripsQueryParams,
@@ -59,7 +59,7 @@ router.get("/trips", async (req, res) => {
       return;
     }
 
-    const trips = await db.select().from(tripsTable).where(sql`${tripsTable.id} = ANY(${tripIds})`);
+    const trips = await db.select().from(tripsTable).where(inArray(tripsTable.id, tripIds));
 
     const result = await Promise.all(
       trips.map(async (trip) => {
