@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Loader2, Search, Upload, X, Paperclip, Map } from "lucide-react";
+import { Loader2, Search, Upload, X, Paperclip } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui-elements";
 import { cn } from "@/lib/utils";
 import type { EventType } from "@workspace/api-client-react";
 import { getMapsUrl, getWazeUrl } from "./lodging-form";
+import { NavButtons } from "@/components/nav-buttons";
 
 // ─── Subtypes ─────────────────────────────────────────────────────────────────
 
@@ -436,19 +437,8 @@ export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, i
 
             {/* Maps preview */}
             {fullAddress && (
-              <div className="flex gap-2 pt-1">
-                {mapsUrl && (
-                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
-                    <Map className="w-3.5 h-3.5" />Google Maps
-                  </a>
-                )}
-                {wazeUrl && (
-                  <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
-                    🚗 Waze
-                  </a>
-                )}
+              <div className="flex gap-2 pt-1 flex-wrap">
+                <NavButtons mapsUrl={mapsUrl} wazeUrl={wazeUrl} />
               </div>
             )}
           </Section>

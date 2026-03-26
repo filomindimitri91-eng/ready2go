@@ -8,7 +8,7 @@ import {
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
   ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
-  RefreshCw, Navigation
+  RefreshCw
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -34,6 +34,7 @@ import type { ActiviteInitialVenue } from "@/components/activite-form";
 import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
 import { WeatherWidget } from "@/components/weather-widget";
+import { NavButtons } from "@/components/nav-buttons";
 import logoImg from "@assets/1774511272544_1774511318297.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -163,45 +164,21 @@ function TransportCard({ event, onDelete }: { event: Event & { transportData?: T
       {(td?.departureLocation || td?.arrivalLocation) && (
         <div className="flex flex-col gap-1.5 mt-3">
           {td?.departureLocation && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground w-14 shrink-0">📍 Départ</span>
-              <a
-                href={getMapsUrl("", td.departureLocation, "", null, null)}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                Google Maps
-              </a>
-              <a
-                href={getWazeUrl("", td.departureLocation, "", null, null)}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-medium bg-sky-50 text-sky-700 hover:bg-sky-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 6.63A10.5 10.5 0 1 0 3.5 17.25c.4.63.96 1.12 1.6 1.44v1.56a.75.75 0 0 0 1.5 0v-1.12a10.43 10.43 0 0 0 9.8 0v1.12a.75.75 0 0 0 1.5 0V18.7a5.05 5.05 0 0 0 1.6-1.45 10.47 10.47 0 0 0 1.04-10.62ZM9.25 14a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm5.5 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
-                Waze
-              </a>
+              <NavButtons
+                mapsUrl={getMapsUrl("", td.departureLocation, "", null, null)}
+                wazeUrl={getWazeUrl("", td.departureLocation, "", null, null)}
+              />
             </div>
           )}
           {td?.arrivalLocation && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground w-14 shrink-0">🏁 Arrivée</span>
-              <a
-                href={getMapsUrl("", td.arrivalLocation, "", null, null)}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                Google Maps
-              </a>
-              <a
-                href={getWazeUrl("", td.arrivalLocation, "", null, null)}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-medium bg-sky-50 text-sky-700 hover:bg-sky-100 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 6.63A10.5 10.5 0 1 0 3.5 17.25c.4.63.96 1.12 1.6 1.44v1.56a.75.75 0 0 0 1.5 0v-1.12a10.43 10.43 0 0 0 9.8 0v1.12a.75.75 0 0 0 1.5 0V18.7a5.05 5.05 0 0 0 1.6-1.45 10.47 10.47 0 0 0 1.04-10.62ZM9.25 14a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Zm5.5 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5Z"/></svg>
-                Waze
-              </a>
+              <NavButtons
+                mapsUrl={getMapsUrl("", td.arrivalLocation, "", null, null)}
+                wazeUrl={getWazeUrl("", td.arrivalLocation, "", null, null)}
+              />
             </div>
           )}
         </div>
@@ -457,19 +434,7 @@ function LodgingCard({ event, onDelete }: { event: Event & { lodgingData?: Lodgi
       {/* Maps buttons */}
       {(mapsUrl || wazeUrl) && (
         <div className="flex gap-2 mt-3 flex-wrap">
-          {mapsUrl && (
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
-              <MapPin className="w-3.5 h-3.5" />
-              Google Maps
-            </a>
-          )}
-          {wazeUrl && (
-            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
-              🚗 Waze
-            </a>
-          )}
+          <NavButtons mapsUrl={mapsUrl} wazeUrl={wazeUrl} />
         </div>
       )}
 
@@ -622,18 +587,7 @@ function RestaurantCard({ event, onDelete }: { event: Event & { restaurationData
 
       {/* Navigation + menu link row */}
       <div className="flex flex-wrap gap-2 mt-3">
-        {mapsUrl && (
-          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
-            <MapPin className="w-3.5 h-3.5" />Google Maps
-          </a>
-        )}
-        {wazeUrl && (
-          <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
-            🚗 Waze
-          </a>
-        )}
+        <NavButtons mapsUrl={mapsUrl} wazeUrl={wazeUrl} />
         {rd?.website && (
           <a href={rd.website} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-secondary/50 text-foreground border border-border hover:bg-secondary transition-colors">
@@ -736,18 +690,7 @@ function ActiviteCard({ event, onDelete }: { event: Event & { activiteData?: Act
 
       {/* Navigation + site */}
       <div className="flex flex-wrap gap-2 mt-3">
-        {mapsUrl && (
-          <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors">
-            <MapPin className="w-3.5 h-3.5" />Google Maps
-          </a>
-        )}
-        {wazeUrl && (
-          <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-100 transition-colors">
-            🚗 Waze
-          </a>
-        )}
+        <NavButtons mapsUrl={mapsUrl} wazeUrl={wazeUrl} />
         {ad?.website && (
           <a href={ad.website} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl bg-secondary/50 text-foreground border border-border hover:bg-secondary transition-colors">
@@ -1182,22 +1125,12 @@ export default function TripDetails() {
               </div>
             </div>
             <div className="flex gap-3">
-              <a
-                href={getMapsUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
-                target="_blank" rel="noopener noreferrer"
+              <NavButtons
+                mapsUrl={getMapsUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
+                wazeUrl={getWazeUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
+                size="lg"
                 onClick={() => setNavPoi(null)}
-                className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl py-3 text-sm font-semibold hover:bg-blue-100 transition"
-              >
-                <Navigation className="w-4 h-4" /> Google Maps
-              </a>
-              <a
-                href={getWazeUrl("", navPoi.name, "", String(navPoi.lat), String(navPoi.lon))}
-                target="_blank" rel="noopener noreferrer"
-                onClick={() => setNavPoi(null)}
-                className="flex-1 flex items-center justify-center gap-2 bg-sky-50 text-sky-600 border border-sky-200 rounded-xl py-3 text-sm font-semibold hover:bg-sky-100 transition"
-              >
-                🚗 Waze
-              </a>
+              />
             </div>
             <button onClick={() => setNavPoi(null)} className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground transition">Fermer</button>
           </div>
