@@ -1008,7 +1008,7 @@ export default function TripDetails() {
               activeTab === "help" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            🆘 Aide
+            🆘 Besoin d'aide
           </button>
         </div>
 
