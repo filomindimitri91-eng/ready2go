@@ -209,11 +209,16 @@ interface OsmRaw {
   address?: {
     house_number?: string;
     road?: string;
+    suburb?: string;
+    city_district?: string;
     city?: string;
     town?: string;
     village?: string;
     municipality?: string;
+    county?: string;
+    state?: string;
     country?: string;
+    country_code?: string;
     postcode?: string;
   };
   extratags?: Record<string, string>;
@@ -224,6 +229,7 @@ export interface OsmPlace {
   address: string;
   city: string;
   country: string;
+  countryCode: string;
   lat: string;
   lng: string;
   phone: string;
@@ -236,14 +242,30 @@ function parseOsm(r: OsmRaw): OsmPlace {
   const a = r.address ?? {};
   const et = r.extratags ?? {};
   const street = [a.house_number, a.road].filter(Boolean).join(" ");
-  const city = a.city ?? a.town ?? a.village ?? a.municipality ?? "";
-  const nameParts = r.display_name.split(",");
-  const name = r.name ?? nameParts[0]?.trim() ?? "";
+
+  // Broader city fallback: city → city_district → town → village → municipality → county
+  const city = a.city ?? a.city_district ?? a.town ?? a.village ?? a.municipality ?? a.county ?? "";
+
+  // Normalise country name via Intl — avoids "France métropolitaine", "España" etc.
+  let country = a.country ?? "";
+  if (a.country_code) {
+    try {
+      country =
+        new Intl.DisplayNames(["fr"], { type: "region" }).of(
+          a.country_code.toUpperCase()
+        ) ?? a.country ?? "";
+    } catch {
+      country = a.country ?? "";
+    }
+  }
+
+  const name = r.name ?? r.display_name.split(",")[0]?.trim() ?? "";
   return {
     name,
     address: street,
     city,
-    country: a.country ?? "",
+    country,
+    countryCode: a.country_code ?? "",
     lat: r.lat,
     lng: r.lon,
     phone: et["contact:phone"] ?? et["phone"] ?? "",
@@ -251,6 +273,14 @@ function parseOsm(r: OsmRaw): OsmPlace {
     website: et["contact:website"] ?? et["website"] ?? "",
     brand: et["brand"] ?? "",
   };
+}
+
+// Country code → flag emoji
+function countryFlag(code: string): string {
+  if (!code || code.length !== 2) return "📍";
+  return String.fromCodePoint(
+    ...code.toUpperCase().split("").map(c => 0x1F1E0 - 65 + c.charCodeAt(0))
+  );
 }
 
 const OSM_HINT: Record<string, string> = {
@@ -330,48 +360,76 @@ function LodgingSearchInput({ value, onChange, onSelect, lodgingType }: {
           value={value}
           onChange={e => handleChange(e.target.value)}
           placeholder="Rechercher ou saisir le nom..."
-          className="flex h-12 w-full rounded-xl border-2 border-border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 transition-all pr-10"
+          className={cn(
+            "flex h-12 w-full rounded-xl border-2 bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 transition-all pr-10",
+            open ? "border-primary" : "border-border"
+          )}
         />
         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
           {loading
-            ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-            : <Search className="w-4 h-4 text-muted-foreground/50" />
+            ? <Loader2 className="w-4 h-4 animate-spin text-primary" />
+            : <Search className="w-4 h-4 text-muted-foreground/60" />
           }
         </div>
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-[100] left-0 right-0 mt-1.5 rounded-2xl border-2 border-primary/20 bg-white dark:bg-zinc-900 shadow-2xl overflow-hidden">
+          <div className="px-3 py-2 bg-primary/5 border-b border-primary/10">
+            <p className="text-[11px] font-semibold text-primary/70 uppercase tracking-wider">
+              Résultats OpenStreetMap
+            </p>
+          </div>
           {results.map((place, i) => (
             <button
               key={i}
               type="button"
               onClick={() => handleSelect(place)}
-              className="w-full text-left px-4 py-3 hover:bg-muted/60 active:bg-muted transition-colors border-b border-border/40 last:border-0"
+              className="w-full text-left px-4 py-3.5 hover:bg-primary/5 active:bg-primary/10 transition-colors border-b border-zinc-100 dark:border-zinc-800 last:border-0"
             >
-              <div className="text-sm font-semibold text-foreground truncate">{place.name}</div>
-              <div className="text-xs text-muted-foreground truncate mt-0.5">
-                {[place.address, place.city, place.country].filter(Boolean).join(", ")}
-              </div>
-              {(place.phone || place.email) && (
-                <div className="text-xs text-primary/80 mt-1 flex flex-wrap gap-3">
-                  {place.phone && <span>📞 {place.phone}</span>}
-                  {place.email && <span>✉️ {place.email}</span>}
+              {/* Name row */}
+              <div className="flex items-start gap-2">
+                <span className="text-base leading-none mt-0.5 shrink-0">
+                  {place.countryCode ? countryFlag(place.countryCode) : "🏨"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 leading-snug">
+                    {place.name}
+                  </div>
+                  {/* Address */}
+                  {(place.address || place.city) && (
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      {[place.address, place.city].filter(Boolean).join(", ")}
+                    </div>
+                  )}
+                  {/* Country */}
+                  {place.country && (
+                    <div className="text-xs font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">
+                      {place.country}
+                    </div>
+                  )}
+                  {/* Phone / email */}
+                  {(place.phone || place.email) && (
+                    <div className="text-xs text-primary mt-1 flex flex-wrap gap-3">
+                      {place.phone && <span>📞 {place.phone}</span>}
+                      {place.email && <span>✉️ {place.email}</span>}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </button>
           ))}
-          <div className="px-4 py-1.5 text-[10px] text-muted-foreground bg-muted/30 flex items-center gap-1">
-            <span>Données ©</span>
+          <div className="px-4 py-1.5 text-[10px] text-zinc-400 bg-zinc-50 dark:bg-zinc-800/50 flex items-center gap-1">
+            <span>©</span>
             <a
               href="https://www.openstreetmap.org/copyright"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-foreground transition-colors"
+              className="underline hover:text-zinc-600 transition-colors"
             >
               OpenStreetMap
             </a>
-            <span>— contributeurs ODbL</span>
+            <span>contributeurs ODbL</span>
           </div>
         </div>
       )}
