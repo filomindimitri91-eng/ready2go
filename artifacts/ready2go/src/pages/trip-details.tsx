@@ -35,7 +35,7 @@ import type { RestaurationInitialVenue } from "@/components/restauration-form";
 import { TripHelp } from "@/components/help/trip-help";
 import { WeatherWidget } from "@/components/weather-widget";
 import { NavButtons } from "@/components/nav-buttons";
-import logoImg from "@assets/1774511272544_1774511318297.png";
+const logoImg = `${import.meta.env.BASE_URL}logo.png`;
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
 // parseISO with date-only strings treats them as UTC midnight, which causes
@@ -1071,7 +1071,7 @@ export default function TripDetails() {
                     {trip.inviteCode}
                   </span>
                   {copied
-                    ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    ? <CheckCircle2 className="w-5 h-5 text-blue-500" />
                     : <Copy className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   }
                 </button>
@@ -1232,10 +1232,10 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
       {/* Specialised forms */}
       {/* Pending POI venue flash banner */}
       {pendingPoiVenue && (selectedType === "activite" || selectedType === "restauration") && (
-        <div className="mb-3 flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-3 py-2 text-xs font-medium">
+        <div className="mb-3 flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl px-3 py-2 text-xs font-medium">
           <span className="text-base">{pendingPoiVenue.emoji}</span>
           <span className="flex-1 truncate"><b>{pendingPoiVenue.name}</b> importé depuis la carte ✓</span>
-          <button onClick={onPoiVenueConsumed} className="text-emerald-600 hover:text-emerald-800 font-bold ml-1">✕</button>
+          <button onClick={onPoiVenueConsumed} className="text-blue-600 hover:text-blue-800 font-bold ml-1">✕</button>
         </div>
       )}
 

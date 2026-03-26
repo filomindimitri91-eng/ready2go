@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Plus, Users, CalendarDays, MapPin, LogOut, Loader2, Compass } from "lucide-react";
-import logoImg from "@assets/1774511272544_1774511318297.png";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth-context";
@@ -15,6 +14,8 @@ import {
   getGetTripsQueryKey
 } from "@workspace/api-client-react";
 import { Button, Card, Input, Label, Modal } from "@/components/ui-elements";
+
+const logoImg = `${import.meta.env.BASE_URL}logo.png`;
 
 // ─── Destination image hook ───────────────────────────────────────────────────
 // Fetches a representative photo from Wikipedia for the given destination.
@@ -76,7 +77,7 @@ function TripCard({ trip, index }: { trip: any; index: number }) {
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-primary/20 to-emerald-500/20" />
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/30 via-primary/20 to-blue-500/20" />
           )}
 
           {/* Gradient overlay for readability */}

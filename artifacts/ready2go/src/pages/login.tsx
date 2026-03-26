@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCreateUser } from "@workspace/api-client-react";
 import { Button, Input, Label } from "@/components/ui-elements";
-import logoImg from "@assets/1774511272544_1774511318297.png";
+const logoImg = `${import.meta.env.BASE_URL}logo.png`;
 
 export default function Login() {
   const [, setLocation] = useLocation();

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { format, parseISO, differenceInDays, isAfter, isBefore, addDays } from "date-fns";
+import { format, parseISO, addDays, isBefore, isAfter } from "date-fns";
 import { fr } from "date-fns/locale";
-import { ChevronDown, ChevronUp, Wind, Droplets } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface DayForecast {
@@ -14,6 +14,7 @@ interface DayForecast {
 interface WeatherData {
   city: string;
   days: DayForecast[];
+  isPast: boolean;
 }
 
 function wmoToEmoji(code: number): string {
@@ -58,33 +59,24 @@ async function geocode(destination: string): Promise<{ lat: number; lon: number;
   }
 }
 
-async function fetchWeather(
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+async function fetchDays(
   lat: number,
   lon: number,
-  startDate: string,
-  endDate: string
+  s: string,
+  e: string,
+  archive: boolean
 ): Promise<DayForecast[] | null> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const maxForecast = addDays(today, 15);
-
-  const clampedStart = isAfter(start, today) && isAfter(start, maxForecast) ? null
-    : isBefore(end, today) ? null
-    : start < today ? today : start;
-
-  if (!clampedStart) return null;
-
-  const clampedEnd = end > maxForecast ? maxForecast : end;
-  if (clampedStart > clampedEnd) return null;
-
-  const s = format(clampedStart, "yyyy-MM-dd");
-  const e = format(clampedEnd, "yyyy-MM-dd");
-
+  const base = archive
+    ? `https://archive-api.open-meteo.com/v1/archive`
+    : `https://api.open-meteo.com/v1/forecast`;
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `${base}?latitude=${lat}&longitude=${lon}` +
       `&daily=weathercode,temperature_2m_max,temperature_2m_min` +
       `&timezone=auto&start_date=${s}&end_date=${e}`
     );
@@ -94,13 +86,57 @@ async function fetchWeather(
     if (!time?.length) return null;
     return time.map((date: string, i: number) => ({
       date,
-      code: weathercode[i],
-      tempMax: Math.round(temperature_2m_max[i]),
-      tempMin: Math.round(temperature_2m_min[i]),
+      code: weathercode[i] ?? 0,
+      tempMax: Math.round(temperature_2m_max[i] ?? 0),
+      tempMin: Math.round(temperature_2m_min[i] ?? 0),
     }));
   } catch {
     return null;
   }
+}
+
+async function fetchWeather(
+  lat: number,
+  lon: number,
+  startDate: string,
+  endDate: string
+): Promise<{ days: DayForecast[]; isPast: boolean } | null> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = addDays(today, -1);
+  const maxForecast = addDays(today, 15);
+
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+
+  const fmt = (d: Date) => format(d, "yyyy-MM-dd");
+
+  if (isAfter(start, maxForecast)) {
+    return null;
+  }
+
+  const tripIsFullyPast = isBefore(end, today);
+
+  if (tripIsFullyPast) {
+    const days = await fetchDays(lat, lon, fmt(start), fmt(end), true);
+    if (!days?.length) return null;
+    return { days: days.slice(0, 14), isPast: true };
+  }
+
+  if (isBefore(start, today)) {
+    const [pastDays, futureDays] = await Promise.all([
+      fetchDays(lat, lon, fmt(start), fmt(yesterday), true),
+      fetchDays(lat, lon, fmt(today), fmt(end > maxForecast ? maxForecast : end), false),
+    ]);
+    const combined = [...(pastDays ?? []), ...(futureDays ?? [])];
+    if (!combined.length) return null;
+    return { days: combined.slice(0, 14), isPast: false };
+  }
+
+  const clampedEnd = end > maxForecast ? maxForecast : end;
+  const days = await fetchDays(lat, lon, fmt(start), fmt(clampedEnd), false);
+  if (!days?.length) return null;
+  return { days: days.slice(0, 14), isPast: false };
 }
 
 interface Props {
@@ -123,9 +159,9 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
     (async () => {
       const geo = await geocode(destination);
       if (!geo) { setUnavailable(true); setLoading(false); return; }
-      const days = await fetchWeather(geo.lat, geo.lon, startDate, endDate);
-      if (!days || days.length === 0) { setUnavailable(true); setLoading(false); return; }
-      setWeather({ city: geo.name, days });
+      const result = await fetchWeather(geo.lat, geo.lon, startDate, endDate);
+      if (!result) { setUnavailable(true); setLoading(false); return; }
+      setWeather({ city: geo.name, days: result.days, isPast: result.isPast });
       setLoading(false);
     })();
   }, [destination, startDate, endDate]);
@@ -139,9 +175,7 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
     );
   }
 
-  if (unavailable || !weather) {
-    return null;
-  }
+  if (unavailable || !weather) return null;
 
   const summary = weather.days[0];
   const allMin = Math.min(...weather.days.map(d => d.tempMin));
@@ -149,7 +183,6 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
 
   return (
     <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border border-white/60 overflow-hidden">
-      {/* Collapsed header — always visible */}
       <button
         onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/60 transition-colors"
@@ -169,12 +202,14 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
         <span className="text-[10px] text-muted-foreground font-medium hidden sm:block">
           {wmoToLabel(summary.code)}
         </span>
+        {weather.isPast && (
+          <span className="text-[10px] text-amber-500 font-semibold hidden sm:block">Historique</span>
+        )}
         <span className="ml-auto text-muted-foreground shrink-0">
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </span>
       </button>
 
-      {/* Expanded daily strip */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -211,7 +246,9 @@ export function WeatherWidget({ destination, startDate, endDate }: Props) {
               </div>
             </div>
             <div className="flex items-center gap-1 px-4 pb-2.5">
-              <span className="text-[9px] text-muted-foreground/60">Source : Open-Meteo</span>
+              <span className="text-[9px] text-muted-foreground/60">
+                Source : Open-Meteo{weather.isPast ? " · Données historiques" : ""}
+              </span>
             </div>
           </motion.div>
         )}

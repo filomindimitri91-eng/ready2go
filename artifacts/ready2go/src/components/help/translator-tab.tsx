@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Mic, MicOff, Volume2, Loader2, RefreshCw } from "lucide-react";
+import { Mic, MicOff, Volume2, Loader2, RefreshCw, ChevronDown } from "lucide-react";
 import { useVoiceRecorder } from "@workspace/integrations-openai-ai-react";
 import { detectLanguage } from "@/lib/emergency-numbers";
 
@@ -10,15 +10,45 @@ interface Props {
 
 type State = "idle" | "recording" | "processing" | "done" | "error";
 
+const LANGUAGES = [
+  { lang: "ar", name: "Arabe", flag: "🇸🇦" },
+  { lang: "zh", name: "Chinois", flag: "🇨🇳" },
+  { lang: "ko", name: "Coréen", flag: "🇰🇷" },
+  { lang: "da", name: "Danois", flag: "🇩🇰" },
+  { lang: "es", name: "Espagnol", flag: "🇪🇸" },
+  { lang: "fi", name: "Finnois", flag: "🇫🇮" },
+  { lang: "el", name: "Grec", flag: "🇬🇷" },
+  { lang: "hi", name: "Hindi", flag: "🇮🇳" },
+  { lang: "id", name: "Indonésien", flag: "🇮🇩" },
+  { lang: "en", name: "Anglais", flag: "🇬🇧" },
+  { lang: "it", name: "Italien", flag: "🇮🇹" },
+  { lang: "ja", name: "Japonais", flag: "🇯🇵" },
+  { lang: "nl", name: "Néerlandais", flag: "🇳🇱" },
+  { lang: "nb", name: "Norvégien", flag: "🇳🇴" },
+  { lang: "fa", name: "Persan", flag: "🇮🇷" },
+  { lang: "pl", name: "Polonais", flag: "🇵🇱" },
+  { lang: "pt", name: "Portugais", flag: "🇵🇹" },
+  { lang: "ro", name: "Roumain", flag: "🇷🇴" },
+  { lang: "ru", name: "Russe", flag: "🇷🇺" },
+  { lang: "sv", name: "Suédois", flag: "🇸🇪" },
+  { lang: "th", name: "Thaï", flag: "🇹🇭" },
+  { lang: "cs", name: "Tchèque", flag: "🇨🇿" },
+  { lang: "tr", name: "Turc", flag: "🇹🇷" },
+  { lang: "uk", name: "Ukrainien", flag: "🇺🇦" },
+  { lang: "vi", name: "Vietnamien", flag: "🇻🇳" },
+].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
 export function TranslatorTab({ destination, apiBase }: Props) {
   const [uiState, setUiState] = useState<State>("idle");
   const [transcription, setTranscription] = useState("");
   const [translation, setTranslation] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showLangPicker, setShowLangPicker] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const detectedLang = detectLanguage(destination);
+  const autoDetected = detectLanguage(destination);
+  const [selectedLang, setSelectedLang] = useState<{ lang: string; name: string; flag: string }>(autoDetected);
 
   const recorder = useVoiceRecorder({
     onStop: async (blob) => {
@@ -35,8 +65,8 @@ export function TranslatorTab({ destination, apiBase }: Props) {
           body: JSON.stringify({
             audioBase64: base64,
             mimeType: blob.type,
-            targetLang: detectedLang.lang,
-            targetLangName: detectedLang.name,
+            targetLang: selectedLang.lang,
+            targetLangName: selectedLang.name,
             destination,
           }),
         });
@@ -118,13 +148,63 @@ export function TranslatorTab({ destination, apiBase }: Props) {
           <div>
             <p className="font-bold text-violet-800">Traducteur vocal</p>
             <p className="text-xs text-violet-600">
-              Traduction automatique → {detectedLang.flag} {detectedLang.name}
+              Parlez en français, obtenez la traduction instantanée
             </p>
           </div>
         </div>
-        <p className="text-xs text-violet-700 bg-violet-100 rounded-xl px-3 py-2">
-          Enregistrez votre voix en français, obtenez la traduction écrite et parlée dans la langue de {destination}.
-        </p>
+
+        {/* Language selector */}
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-violet-700 mb-1.5 uppercase tracking-wide">
+            Traduire vers :
+          </p>
+          <div className="relative">
+            <button
+              onClick={() => setShowLangPicker(v => !v)}
+              className="w-full flex items-center justify-between gap-2 bg-white border border-violet-200 rounded-xl px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-50 transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-lg leading-none">{selectedLang.flag}</span>
+                <span>{selectedLang.name}</span>
+              </span>
+              <ChevronDown className={`w-4 h-4 text-violet-400 transition-transform ${showLangPicker ? "rotate-180" : ""}`} />
+            </button>
+
+            {showLangPicker && (
+              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-violet-100 rounded-xl shadow-xl overflow-hidden">
+                <div className="max-h-52 overflow-y-auto">
+                  {LANGUAGES.map((l) => (
+                    <button
+                      key={l.lang}
+                      onClick={() => {
+                        setSelectedLang(l);
+                        setShowLangPicker(false);
+                        reset();
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-violet-50 transition-colors text-left ${
+                        selectedLang.lang === l.lang ? "bg-violet-50 font-semibold text-violet-700" : "text-foreground"
+                      }`}
+                    >
+                      <span className="text-base leading-none">{l.flag}</span>
+                      <span>{l.name}</span>
+                      {selectedLang.lang === l.lang && (
+                        <span className="ml-auto text-violet-500 text-xs">✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {autoDetected.lang !== selectedLang.lang && (
+            <button
+              onClick={() => { setSelectedLang(autoDetected); reset(); }}
+              className="mt-1.5 text-[11px] text-violet-500 hover:text-violet-700 underline"
+            >
+              Revenir à la langue détectée ({autoDetected.flag} {autoDetected.name})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Mic button */}
@@ -163,7 +243,6 @@ export function TranslatorTab({ destination, apiBase }: Props) {
       {/* Results */}
       {uiState === "done" && transcription && (
         <div className="space-y-3">
-          {/* Original */}
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
               🇫🇷 Vous avez dit
@@ -171,11 +250,10 @@ export function TranslatorTab({ destination, apiBase }: Props) {
             <p className="text-sm text-foreground italic">"{transcription}"</p>
           </div>
 
-          {/* Translation */}
           <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-primary uppercase tracking-wide">
-                {detectedLang.flag} Traduction — {detectedLang.name}
+                {selectedLang.flag} Traduction — {selectedLang.name}
               </p>
               {audioRef.current && (
                 <button
