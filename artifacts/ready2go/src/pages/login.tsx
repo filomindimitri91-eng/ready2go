@@ -70,7 +70,7 @@ export default function Login() {
               <Input
                 id="username"
                 type="text"
-                placeholder="Ex: VoyageurDu93"
+                placeholder="Ex: VoyageurInterGalactique"
                 value={username}
                 onChange={(e) => {
                   setUsername(e.target.value);
