@@ -10,6 +10,12 @@ const __dirname = path.dirname(__filename);
 const port = Number(process.env.PORT ?? 5173);
 const basePath = process.env.BASE_PATH ?? "/";
 
+// On Vercel (VERCEL=1), output directly to the repo root dist/ so Vercel
+// finds it without any copy step.
+const outDir = process.env.VERCEL
+  ? path.resolve(__dirname, "../../dist")
+  : path.resolve(__dirname, "dist");
+
 export default defineConfig({
   base: basePath,
   plugins: [react(), tailwindcss()],
@@ -21,7 +27,7 @@ export default defineConfig({
   },
   root: __dirname,
   build: {
-    outDir: path.resolve(__dirname, "dist"),
+    outDir,
     emptyOutDir: true,
   },
   server: {

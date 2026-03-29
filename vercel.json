@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/ready2go run build && node -e \"const fs=require('fs'),path=require('path'),cwd=process.cwd(),src=path.join(cwd,'artifacts/ready2go/dist'),dest=path.join(cwd,'dist');console.log('src:',src);fs.mkdirSync(dest,{recursive:true});fs.cpSync(src,dest,{recursive:true});console.log('OK:',fs.readdirSync(dest).join(', '))\"",
+  "buildCommand": "pnpm --filter @workspace/ready2go run build",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
