@@ -7,16 +7,16 @@ router.use(requireAuth);
 
 async function getOpenAI() {
   const { default: OpenAI } = await import("openai");
-  // Replit AI proxy (local dev)
+  // 1. Direct key — works on any deployment (Vercel, Render, Railway…)
+  const directKey = process.env.OPENAI_API_KEY;
+  if (directKey) {
+    return new OpenAI({ apiKey: directKey });
+  }
+  // 2. Replit AI proxy — dev-only fallback (not available outside Replit)
   const openaiUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
   if (openaiUrl && openaiKey) {
     return new OpenAI({ apiKey: openaiKey, baseURL: openaiUrl });
-  }
-  // Direct OpenAI API key (Vercel production or any other deployment)
-  const directKey = process.env.OPENAI_API_KEY;
-  if (directKey) {
-    return new OpenAI({ apiKey: directKey });
   }
   throw new Error("AI not configured");
 }
@@ -566,6 +566,109 @@ router.post("/ai/import-reservation", async (req, res) => {
   } catch (err: any) {
     console.error("[ai/import-reservation]", err);
     res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
+// ─── In-memory cache for travel news (30 min TTL) ────────────────────────────
+const newsCache = new Map<string, { ts: number; items: any[] }>();
+const NEWS_TTL = 30 * 60 * 1000;
+
+function classifyNewsItem(title: string): string {
+  const t = title.toLowerCase();
+  if (/grève|strike|perturbation|retard|annulé|fermeture|alerte|incident/.test(t)) return "alert";
+  if (/sncf|tgv|ter|izy|eurostar|air france|vueling|easyjet|ryanair|transavia|metro|rer|bus|tram|avion|vol\b|aéroport|gare/.test(t)) return "transport";
+  if (/météo|pluie|orage|chaleur|neige|vent|inondation|sécheresse|canicule/.test(t)) return "weather";
+  if (/festival|concert|exposition|match|spectacle|événement|fête|carnaval/.test(t)) return "event";
+  return "info";
+}
+
+async function fetchGoogleNewsRSS(query: string): Promise<any[]> {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=fr&gl=FR&ceid=FR:fr`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; Ready2Go/1.0)" },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`);
+  const xml = await res.text();
+  const items: any[] = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let m: RegExpExecArray | null;
+  while ((m = itemRegex.exec(xml)) !== null) {
+    const block = m[1];
+    const titleMatch = /<title>([\s\S]*?)<\/title>/.exec(block);
+    const linkMatch  = /<link>([\s\S]*?)<\/link>/.exec(block);
+    if (!titleMatch) continue;
+    const title = titleMatch[1]
+      .replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/\s*-\s*[^-]+$/, "") // strip " - Source Name" suffix
+      .trim();
+    if (!title || title.toLowerCase().includes("google news")) continue;
+    const url = linkMatch ? linkMatch[1].trim() : undefined;
+    items.push({ title, category: classifyNewsItem(title), url });
+    if (items.length >= 10) break;
+  }
+  return items;
+}
+
+// POST /api/ai/travel-news
+router.post("/ai/travel-news", async (req, res) => {
+  try {
+    const { destination, operators = [] } = req.body as {
+      destination: string;
+      operators?: string[];
+    };
+    if (!destination) { res.status(400).json({ error: "destination requis" }); return; }
+
+    const cacheKey = `${destination}:${operators.join(",")}`.toLowerCase();
+    const cached = newsCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < NEWS_TTL) {
+      res.json({ items: cached.items, source: "cache" });
+      return;
+    }
+
+    // Build RSS query: destination + operator names
+    const city = destination.split(",")[0].trim();
+    const opStr = operators.slice(0, 2).join(" ").trim();
+    const query = [city, "transport", "voyage", opStr].filter(Boolean).join(" ");
+
+    let items: any[] = [];
+    try {
+      items = await fetchGoogleNewsRSS(query);
+    } catch (rssErr) {
+      console.warn("[travel-news] RSS fetch failed:", (rssErr as Error).message);
+    }
+
+    // If RSS gave nothing, try AI fallback
+    if (items.length === 0) {
+      const openai = await getOpenAI().catch(() => null);
+      if (openai) {
+        const opList = operators.length ? `Opérateurs concernés : ${operators.join(", ")}.` : "";
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          max_completion_tokens: 600,
+          messages: [
+            { role: "system", content: "Tu es un agrégateur d'actualités voyage. Génère des titres d'actualité plausibles et concis (max 90 chars chacun). Réponds UNIQUEMENT en JSON." },
+            { role: "user", content: `Génère 6 titres d'actualité pouvant impacter des voyageurs à destination de ${destination}. ${opList} Inclus : grèves/perturbations transports, météo, événements locaux, alertes sécurité si pertinentes. Format : {"items":[{"title":"...","category":"alert|transport|weather|event|info"}]}` },
+          ],
+        });
+        const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+        try {
+          const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+          const parsed = JSON.parse(cleaned);
+          items = Array.isArray(parsed.items) ? parsed.items : [];
+        } catch { items = []; }
+      }
+    }
+
+    if (items.length > 0) {
+      newsCache.set(cacheKey, { ts: Date.now(), items });
+    }
+
+    res.json({ items, source: items.length > 0 ? "live" : "empty" });
+  } catch (err: any) {
+    console.error("[ai/travel-news]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur", items: [] });
   }
 });
 

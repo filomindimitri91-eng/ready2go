@@ -40,6 +40,7 @@ import { BudgetTab } from "@/components/budget-tab";
 import { DeplacerTab } from "@/components/deplacer-tab";
 import { PriceSection, PRICE_TYPE_LABEL } from "@/components/price-section";
 import { BookingLinksSection, ImportReservationSection } from "@/components/booking-section";
+import { NewsTicker } from "@/components/news-ticker";
 import logoImg from "@/assets/logo.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -1107,6 +1108,38 @@ export default function TripDetails() {
     }, {});
   }, [trip?.events]);
 
+  const tripSummary = useMemo(() => {
+    if (!trip) return "";
+    const evts = (trip.events ?? []) as any[];
+    const mbrs = (trip.members ?? []) as any[];
+    const transports  = evts.filter(e => e.type === "transport").length;
+    const logements   = evts.filter(e => e.type === "logement").length;
+    const activites   = evts.filter(e => e.type === "activite").length;
+    const restaur     = evts.filter(e => e.type === "restauration").length;
+    const start = parseDateLocal(trip.startDate);
+    const end   = parseDateLocal(trip.endDate);
+    const days  = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    const parts: string[] = [];
+    if (transports > 0) parts.push(`✈️ ${transports} transport${transports > 1 ? "s" : ""}`);
+    if (logements  > 0) parts.push(`🏨 ${logements} héberg.`);
+    if (activites  > 0) parts.push(`🎭 ${activites} activité${activites > 1 ? "s" : ""}`);
+    if (restaur    > 0) parts.push(`🍽️ ${restaur} resto${restaur > 1 ? "s" : ""}`);
+    if (mbrs.length > 0) parts.push(`👥 ${mbrs.length} pers.`);
+    parts.push(`📅 ${days}j`);
+    return parts.join("  ·  ");
+  }, [trip?.events, trip?.members, trip?.startDate, trip?.endDate]);
+
+  const tripStatus = useMemo(() => {
+    if (!trip) return null;
+    const today = new Date();
+    const start = parseDateLocal(trip.startDate);
+    const end   = parseDateLocal(trip.endDate);
+    if (today >= start && today <= end) return { label: "En cours", color: "bg-green-100 text-green-700" };
+    const daysUntil = Math.ceil((start.getTime() - today.getTime()) / 86400000);
+    if (daysUntil > 0) return { label: `J−${daysUntil}`, color: "bg-blue-100 text-blue-700" };
+    return { label: "Terminé", color: "bg-slate-100 text-slate-500" };
+  }, [trip?.startDate, trip?.endDate]);
+
   const sortedDates = Object.keys(groupedEvents).sort();
 
   const handleCopyCode = () => {
@@ -1141,17 +1174,34 @@ export default function TripDetails() {
       {/* Background blobs */}
       <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-[400px] h-[400px] rounded-full bg-violet-300/15 blur-3xl pointer-events-none" />
-      {/* Header — sticky glass bar, same as dashboard */}
+      {/* Header — sticky glass bar, 3-column grid */}
       <header className="sticky top-0 z-30 bg-white/55 backdrop-blur-2xl border-b border-white/60">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/">
-            <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors">
-              <ChevronLeft className="w-4 h-4" />
-              Retour
-            </button>
-          </Link>
-          <img src={logoImg} alt="Ready2Go" className="h-8 w-auto absolute left-1/2 -translate-x-1/2" />
-          <div className="w-16" />
+        <div className="max-w-3xl mx-auto px-4">
+          {/* Row 1 — nav */}
+          <div className="h-12 grid grid-cols-3 items-center">
+            <Link href="/">
+              <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+                <span>Retour</span>
+              </button>
+            </Link>
+            <div className="flex justify-center">
+              <img src={logoImg} alt="Ready2Go" className="h-7 w-auto" />
+            </div>
+            <div className="flex justify-end">
+              {tripStatus && (
+                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", tripStatus.color)}>
+                  {tripStatus.label}
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Row 2 — trip summary */}
+          {tripSummary && (
+            <div className="pb-2 overflow-x-auto no-scrollbar">
+              <p className="text-[11px] text-slate-400 whitespace-nowrap select-none">{tripSummary}</p>
+            </div>
+          )}
         </div>
       </header>
 
@@ -1341,6 +1391,11 @@ export default function TripDetails() {
                 />
                 </>
               )}
+              {/* News ticker — bottom of programme tab */}
+              <NewsTicker
+                destination={trip.destination}
+                events={(trip.events ?? []) as any[]}
+              />
             </div>
           ) : activeTab === "group" ? (
             <div className="space-y-5">
