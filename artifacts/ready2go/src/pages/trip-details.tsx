@@ -929,6 +929,7 @@ export default function TripDetails() {
   const [groupChildren, setGroupChildren] = useState(0);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
   const [addEventType, setAddEventType] = useState<EventType>("activite");
+  const [addEventInitialTypes, setAddEventInitialTypes] = useState<{ transportType?: string; lodgingType?: string; activiteType?: string }>({});
   const [copied, setCopied] = useState(false);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
@@ -1057,6 +1058,20 @@ export default function TripDetails() {
     setIsAddEventOpen(false);
     setMapSelectMode(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const openFromBooking = (eventType: EventType, subtype?: string) => {
+    setAddEventType(eventType);
+    if (eventType === "transport") {
+      setAddEventInitialTypes({ transportType: subtype });
+    } else if (eventType === "logement") {
+      setAddEventInitialTypes({ lodgingType: subtype });
+    } else if (eventType === "activite") {
+      setAddEventInitialTypes({ activiteType: subtype });
+    } else {
+      setAddEventInitialTypes({});
+    }
+    setIsAddEventOpen(true);
   };
 
   const { data: trip, isLoading, isError } = useGetTrip(tripId, { query: { enabled: !!tripId } });
@@ -1247,9 +1262,11 @@ export default function TripDetails() {
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
                     Commencez à ajouter des activités, transports ou logements à votre voyage.
                   </p>
+                  <BookingLinksSection onAddFromBooking={openFromBooking} />
                 </div>
               ) : (
-                sortedDates.map((date) => (
+                <>
+                {sortedDates.map((date) => (
                   <div key={date}>
                     <h3 className="sticky top-16 z-20 py-2 bg-white/70 backdrop-blur-md text-base font-bold text-slate-700 border-b border-white/60 mb-4 flex items-center gap-2">
                       <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">
@@ -1312,7 +1329,9 @@ export default function TripDetails() {
                       })}
                     </div>
                   </div>
-                ))
+                ))}
+                <BookingLinksSection onAddFromBooking={openFromBooking} />
+                </>
               )}
             </div>
           ) : activeTab === "group" ? (
@@ -1543,7 +1562,7 @@ export default function TripDetails() {
       {/* Add Event Modal */}
       <AddEventModal
         isOpen={isAddEventOpen}
-        onClose={() => { setIsAddEventOpen(false); setPendingPoiVenue(null); }}
+        onClose={() => { setIsAddEventOpen(false); setPendingPoiVenue(null); setAddEventInitialTypes({}); }}
         onAdd={(data: any) => createEventMutation.mutate({ tripId, data: { ...data, creatorId: userId! } as any })}
         isPending={createEventMutation.isPending}
         tripStartDate={trip.startDate}
@@ -1553,6 +1572,9 @@ export default function TripDetails() {
         pendingPoiVenue={pendingPoiVenue}
         onPoiVenueConsumed={() => setPendingPoiVenue(null)}
         onMapSelectRequest={handleRequestMapSelect}
+        initialTransportType={addEventInitialTypes.transportType}
+        initialLodgingType={addEventInitialTypes.lodgingType}
+        initialActiviteType={addEventInitialTypes.activiteType}
       />
 
       {editingEvent && (
@@ -1572,7 +1594,7 @@ export default function TripDetails() {
 
 // ─── Add Event Modal ──────────────────────────────────────────────────────────
 
-function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripEndDate, selectedType, onTypeChange, pendingPoiVenue, onPoiVenueConsumed, onMapSelectRequest }: {
+function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripEndDate, selectedType, onTypeChange, pendingPoiVenue, onPoiVenueConsumed, onMapSelectRequest, initialTransportType, initialLodgingType, initialActiviteType }: {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (data: any) => void;
@@ -1584,6 +1606,9 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
   pendingPoiVenue?: PoiClickData | null;
   onPoiVenueConsumed?: () => void;
   onMapSelectRequest?: () => void;
+  initialTransportType?: string;
+  initialLodgingType?: string;
+  initialActiviteType?: string;
 }) {
   const [formData, setFormData] = useState({
     title: "",
@@ -1666,6 +1691,7 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           onSubmit={handleTransportSubmit}
           isPending={isPending}
           onCancel={onClose}
+          initialTransportType={initialTransportType}
         />
       ) : selectedType === "logement" ? (
         <LodgingForm
@@ -1675,6 +1701,7 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           onSubmit={handleLodgingSubmit}
           isPending={isPending}
           onCancel={onClose}
+          initialLodgingType={initialLodgingType}
         />
       ) : selectedType === "restauration" ? (
         <RestaurationForm
@@ -1702,6 +1729,7 @@ function AddEventModal({ isOpen, onClose, onAdd, isPending, tripStartDate, tripE
           isPending={isPending}
           onCancel={onClose}
           onRequestMapSelect={onMapSelectRequest}
+          initialActiviteType={initialActiviteType}
           initialVenue={pendingPoiVenue ? {
             name: pendingPoiVenue.name,
             lat: pendingPoiVenue.lat,
@@ -1915,5 +1943,100 @@ function EditEventModal({ event, tripId, onClose, onSuccess }: {
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ─── Booking Links Section ────────────────────────────────────────────────────
+
+const BOOKING_PARTNERS = [
+  {
+    key: "skyscanner",
+    label: "Skyscanner",
+    subtitle: "Vols",
+    emoji: "✈️",
+    bgClass: "bg-cyan-50 border-cyan-200",
+    url: "https://www.skyscanner.fr/",
+    eventType: "transport" as EventType,
+    subtype: "plane",
+  },
+  {
+    key: "bsp-auto",
+    label: "bsp-auto.com",
+    subtitle: "Location voiture",
+    emoji: "🚗",
+    bgClass: "bg-orange-50 border-orange-200",
+    url: "https://www.bsp-auto.com/",
+    eventType: "transport" as EventType,
+    subtype: "carRental",
+  },
+  {
+    key: "booking",
+    label: "Booking.com",
+    subtitle: "Hôtels",
+    emoji: "🏨",
+    bgClass: "bg-blue-50 border-blue-200",
+    url: "https://www.booking.com/",
+    eventType: "logement" as EventType,
+    subtype: "hotel",
+  },
+  {
+    key: "ticketmaster",
+    label: "Ticketmaster",
+    subtitle: "Concerts & Événements",
+    emoji: "🎤",
+    bgClass: "bg-red-50 border-red-200",
+    url: "https://www.ticketmaster.fr/",
+    eventType: "activite" as EventType,
+    subtype: "concert",
+  },
+];
+
+function BookingLinksSection({ onAddFromBooking }: {
+  onAddFromBooking: (type: EventType, subtype?: string) => void;
+}) {
+  return (
+    <div className="mt-6 pb-4">
+      <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">🔗</span>
+          <h3 className="font-bold text-sm text-slate-700">Réserver en ligne</h3>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Réservez via nos partenaires et ajoutez votre réservation directement au programme.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {BOOKING_PARTNERS.map(p => (
+            <div key={p.key} className={`rounded-xl border p-3 flex flex-col gap-2.5 ${p.bgClass}`}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg leading-none">{p.emoji}</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold truncate leading-tight">{p.label}</p>
+                  <p className="text-[11px] text-muted-foreground leading-tight">{p.subtitle}</p>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold bg-white/80 hover:bg-white border border-white/60 rounded-lg px-2 py-1.5 text-foreground transition-all"
+                >
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                  Réserver
+                </a>
+                <button
+                  type="button"
+                  onClick={() => onAddFromBooking(p.eventType, p.subtype)}
+                  className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold bg-primary text-primary-foreground rounded-lg px-2 py-1.5 transition-all hover:opacity-90"
+                >
+                  <Plus className="w-3 h-3 shrink-0" />
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

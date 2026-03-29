@@ -444,6 +444,7 @@ interface Props {
   onSubmit: (data: LodgingSubmitData) => void;
   isPending: boolean;
   onCancel: () => void;
+  initialLodgingType?: string;
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -482,8 +483,8 @@ const blank = {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel }: Props) {
-  const [d, setD] = useState({ ...blank, checkInDate: tripDate });
+export function LodgingForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialLodgingType }: Props) {
+  const [d, setD] = useState({ ...blank, checkInDate: tripDate, lodgingType: initialLodgingType ?? "" });
   const [breakfastIncluded, setBreakfastIncluded] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
   const [priceInput, setPriceInput] = useState("");

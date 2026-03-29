@@ -285,6 +285,7 @@ interface Props {
   onCancel: () => void;
   initialVenue?: ActiviteInitialVenue | null;
   onRequestMapSelect?: () => void;
+  initialActiviteType?: string;
 }
 
 // ─── Form state ───────────────────────────────────────────────────────────────
@@ -317,8 +318,8 @@ function activiteTypeFromTags(tags?: Record<string, string>): string {
   return "visite";
 }
 
-export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialVenue, onRequestMapSelect }: Props) {
-  const [d, setD] = useState({ ...blank, date: tripDate });
+export function ActiviteForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialVenue, onRequestMapSelect, initialActiviteType }: Props) {
+  const [d, setD] = useState({ ...blank, date: tripDate, activiteType: initialActiviteType ?? "" });
   const set = (key: keyof typeof blank) => (value: string) => setD(prev => ({ ...prev, [key]: value }));
   const [ticket, setTicket] = useState<{ name: string; url: string; size: number; type: string } | null>(null);
   const [priceInput, setPriceInput] = useState("");

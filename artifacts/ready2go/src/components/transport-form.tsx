@@ -164,6 +164,7 @@ interface Props {
   onSubmit: (data: TransportSubmitData) => void;
   isPending: boolean;
   onCancel: () => void;
+  initialTransportType?: string;
 }
 
 const blank = {
@@ -188,8 +189,8 @@ const blank = {
   notes: "",
 };
 
-export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel }: Props) {
-  const [d, setD] = useState({ ...blank, departureDate: tripDate });
+export function TransportForm({ tripDate, tripStartDate, tripEndDate, onSubmit, isPending, onCancel, initialTransportType }: Props) {
+  const [d, setD] = useState({ ...blank, departureDate: tripDate, transportType: initialTransportType ?? "" });
   const [attachment, setAttachment] = useState<{ name: string; url: string } | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [isFree, setIsFree] = useState(false);
