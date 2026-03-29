@@ -1,3 +1,4 @@
+// Import the pre-compiled Express app (built with esbuild-plugin-pino for correct worker thread handling)
 let _app: any = null;
 let _appError: string | null = null;
 let _appLoaded = false;
@@ -5,7 +6,8 @@ let _appLoaded = false;
 async function ensureApp() {
   if (_appLoaded) return _app;
   try {
-    const mod = await import("../artifacts/api-server/src/app");
+    // Import the pre-built bundle — compiled with esbuild-plugin-pino to handle pino worker threads
+    const mod = await import("../artifacts/api-server/dist/app.mjs");
     _app = mod.default;
   } catch (err: any) {
     _appError = String(err?.stack || err?.message || err);
@@ -15,7 +17,7 @@ async function ensureApp() {
   return _app;
 }
 
-// Start loading eagerly
+// Start loading eagerly on cold start
 const _loadPromise = ensureApp();
 
 export default async function handler(req: any, res: any) {

@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/ready2go run build",
+  "buildCommand": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/ready2go run build",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
