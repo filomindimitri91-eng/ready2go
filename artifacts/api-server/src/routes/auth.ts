@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { authRateLimiter } from "../middleware/rateLimit";
 
 const router: IRouter = Router();
 
@@ -11,8 +12,15 @@ const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-production";
 const JWT_EXPIRES_IN = "30d";
 
 const RegisterBody = z.object({
-  username: z.string().min(2).max(30).regex(/^[a-zA-Z0-9_\-]+$/, "Lettres, chiffres, _ et - uniquement"),
-  password: z.string().min(6).max(100),
+  username: z
+    .string()
+    .min(2, "Le pseudo doit contenir au moins 2 caractères.")
+    .max(30, "Le pseudo ne peut pas dépasser 30 caractères.")
+    .regex(/^[a-zA-Z0-9_\-À-ÿ]+$/, "Pseudo invalide (lettres, chiffres, _ et - uniquement)."),
+  password: z
+    .string()
+    .min(6, "Le mot de passe doit contenir au moins 6 caractères.")
+    .max(100),
 });
 
 const LoginBody = z.object({
@@ -24,7 +32,7 @@ function signToken(userId: number, username: string) {
   return jwt.sign({ sub: userId, username }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-router.post("/auth/register", async (req, res) => {
+router.post("/auth/register", authRateLimiter, async (req, res) => {
   try {
     const body = RegisterBody.parse(req.body);
 
@@ -39,7 +47,7 @@ router.post("/auth/register", async (req, res) => {
       return;
     }
 
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    const passwordHash = await bcrypt.hash(body.password, 12);
 
     let user;
     if (existing.length > 0) {
@@ -67,7 +75,7 @@ router.post("/auth/register", async (req, res) => {
   }
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", authRateLimiter, async (req, res) => {
   try {
     const body = LoginBody.parse(req.body);
 
@@ -77,13 +85,9 @@ router.post("/auth/login", async (req, res) => {
       .where(eq(usersTable.username, body.username))
       .limit(1);
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
+      await bcrypt.hash("dummy", 12);
       res.status(401).json({ error: "Identifiants incorrects." });
-      return;
-    }
-
-    if (!user.passwordHash) {
-      res.status(401).json({ error: "Ce compte n'a pas de mot de passe. Veuillez vous inscrire." });
       return;
     }
 
@@ -105,5 +109,4 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-export { JWT_SECRET };
 export default router;

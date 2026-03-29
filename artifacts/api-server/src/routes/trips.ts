@@ -1,13 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, tripsTable, tripMembersTable, usersTable, eventsTable, tripChatMessagesTable } from "@workspace/db";
 import { eq, and, count, inArray, asc } from "drizzle-orm";
 import { z } from "zod";
+import { requireAuth } from "../middleware/auth";
 import {
-  GetTripsQueryParams,
-  GetTripParams,
   DeleteTripParams,
-  JoinTripBody,
-  GetTripMembersParams,
   GetTripEventsParams,
   CreateEventParams,
   DeleteEventParams,
@@ -19,7 +16,6 @@ const CreateTripBody = z.object({
   description: z.string().optional().nullable(),
   startDate: z.string().min(1),
   endDate: z.string().min(1),
-  creatorId: z.coerce.number().int(),
 });
 
 const CreateEventBody = z.object({
@@ -32,64 +28,104 @@ const CreateEventBody = z.object({
   notes: z.string().optional().nullable(),
   pricePerPerson: z.number().optional().nullable(),
   priceType: z.string().optional().nullable(),
-  creatorId: z.coerce.number().int(),
   transportData: z.record(z.string(), z.any()).optional().nullable(),
   lodgingData: z.record(z.string(), z.any()).optional().nullable(),
   restaurationData: z.record(z.string(), z.any()).optional().nullable(),
   activiteData: z.record(z.string(), z.any()).optional().nullable(),
 });
 
+const UpdateEventBody = z.object({
+  title: z.string().min(1).optional(),
+  date: z.string().optional(),
+  startTime: z.string().optional().nullable(),
+  endTime: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  pricePerPerson: z.number().optional().nullable(),
+  priceType: z.string().optional().nullable(),
+});
+
+const JoinTripBody = z.object({
+  inviteCode: z.string().min(1),
+});
+
+const ChatMessageBody = z.object({
+  content: z.string().min(1).max(2000),
+});
+
 const router: IRouter = Router();
 
-// ─── In-memory location store (ephemeral, TTL 2 min) ─────────────────────────
+async function isTripMember(tripId: number, userId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: tripMembersTable.id })
+    .from(tripMembersTable)
+    .where(and(eq(tripMembersTable.tripId, tripId), eq(tripMembersTable.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+function requireTripMember(req: Request, res: Response, next: NextFunction): void {
+  const tripId = parseInt(req.params.tripId);
+  const userId = req.user!.userId;
+
+  if (!tripId) { res.status(400).json({ error: "tripId invalide" }); return; }
+
+  isTripMember(tripId, userId).then((ok) => {
+    if (!ok) {
+      res.status(403).json({ error: "Accès refusé — vous n'êtes pas membre de ce voyage." });
+    } else {
+      next();
+    }
+  }).catch(() => {
+    res.status(500).json({ error: "Erreur serveur" });
+  });
+}
+
+function generateInviteCode(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+// ─── Location (in-memory, ephemeral) ─────────────────────────────────────────
 type LocEntry = { userId: number; username: string; lat: number; lng: number; updatedAt: number };
 const tripLocs = new Map<number, Map<number, LocEntry>>();
 const LOC_TTL = 2 * 60 * 1000;
 
-router.post("/trips/:tripId/location", (req, res) => {
+router.post("/trips/:tripId/location", requireAuth, requireTripMember, (req, res) => {
   const tripId = parseInt(req.params.tripId);
-  const { userId, username, lat, lng } = req.body;
-  if (!tripId || !userId || lat == null || lng == null) {
-    res.status(400).json({ error: "Données manquantes" });
-    return;
-  }
+  const { lat, lng } = req.body;
+  const { userId, username } = req.user!;
+  if (lat == null || lng == null) { res.status(400).json({ error: "Données manquantes" }); return; }
   if (!tripLocs.has(tripId)) tripLocs.set(tripId, new Map());
-  tripLocs.get(tripId)!.set(Number(userId), { userId: Number(userId), username: String(username), lat: Number(lat), lng: Number(lng), updatedAt: Date.now() });
+  tripLocs.get(tripId)!.set(userId, { userId, username, lat: Number(lat), lng: Number(lng), updatedAt: Date.now() });
   res.json({ ok: true });
 });
 
-router.delete("/trips/:tripId/location", (req, res) => {
+router.delete("/trips/:tripId/location", requireAuth, requireTripMember, (req, res) => {
   const tripId = parseInt(req.params.tripId);
-  const userId = Number(req.body?.userId);
-  tripLocs.get(tripId)?.delete(userId);
+  tripLocs.get(tripId)?.delete(req.user!.userId);
   res.json({ ok: true });
 });
 
-router.get("/trips/:tripId/locations", (req, res) => {
+router.get("/trips/:tripId/locations", requireAuth, requireTripMember, (req, res) => {
   const tripId = parseInt(req.params.tripId);
   const now = Date.now();
   const locs = tripLocs.get(tripId);
   if (!locs) { res.json([]); return; }
-  const active = [...locs.values()].filter(l => now - l.updatedAt < LOC_TTL);
-  // Clean up stale
+  const active = [...locs.values()].filter((l) => now - l.updatedAt < LOC_TTL);
   for (const [uid, l] of locs.entries()) {
     if (now - l.updatedAt >= LOC_TTL) locs.delete(uid);
   }
   res.json(active);
 });
 
-function generateInviteCode(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+// ─── Trips CRUD ───────────────────────────────────────────────────────────────
 
-router.get("/trips", async (req, res) => {
+router.get("/trips", requireAuth, async (req, res) => {
   try {
-    const { userId } = GetTripsQueryParams.parse(req.query);
+    const userId = req.user!.userId;
 
     const memberRows = await db
       .select({ tripId: tripMembersTable.tripId })
@@ -97,10 +133,7 @@ router.get("/trips", async (req, res) => {
       .where(eq(tripMembersTable.userId, userId));
 
     const tripIds = memberRows.map((r) => r.tripId);
-    if (tripIds.length === 0) {
-      res.json([]);
-      return;
-    }
+    if (tripIds.length === 0) { res.json([]); return; }
 
     const trips = await db.select().from(tripsTable).where(inArray(tripsTable.id, tripIds));
 
@@ -116,11 +149,7 @@ router.get("/trips", async (req, res) => {
           .from(eventsTable)
           .where(eq(eventsTable.tripId, trip.id));
 
-        return {
-          ...trip,
-          memberCount: Number(memberCount),
-          eventCount: Number(eventCount),
-        };
+        return { ...trip, memberCount: Number(memberCount), eventCount: Number(eventCount) };
       }),
     );
 
@@ -128,13 +157,14 @@ router.get("/trips", async (req, res) => {
     res.json(result);
   } catch (err) {
     req.log.error({ err }, "Error getting trips");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.post("/trips", async (req, res) => {
+router.post("/trips", requireAuth, async (req, res) => {
   try {
     const body = CreateTripBody.parse(req.body);
+    const userId = req.user!.userId;
 
     let inviteCode = generateInviteCode();
     let exists = true;
@@ -153,22 +183,27 @@ router.post("/trips", async (req, res) => {
         startDate: body.startDate,
         endDate: body.endDate,
         inviteCode,
-        creatorId: body.creatorId,
+        creatorId: userId,
       })
       .returning();
 
-    await db.insert(tripMembersTable).values({ tripId: trip.id, userId: body.creatorId });
+    await db.insert(tripMembersTable).values({ tripId: trip.id, userId });
 
     res.status(201).json(trip);
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      res.status(400).json({ error: "Données invalides" });
+      return;
+    }
     req.log.error({ err }, "Error creating trip");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.post("/trips/join", async (req, res) => {
+router.post("/trips/join", requireAuth, async (req, res) => {
   try {
     const body = JoinTripBody.parse(req.body);
+    const userId = req.user!.userId;
 
     const [trip] = await db
       .select()
@@ -176,15 +211,12 @@ router.post("/trips/join", async (req, res) => {
       .where(eq(tripsTable.inviteCode, body.inviteCode.toUpperCase()))
       .limit(1);
 
-    if (!trip) {
-      res.status(404).json({ error: "Code d'invitation invalide" });
-      return;
-    }
+    if (!trip) { res.status(404).json({ error: "Code d'invitation invalide" }); return; }
 
     const existing = await db
       .select()
       .from(tripMembersTable)
-      .where(and(eq(tripMembersTable.tripId, trip.id), eq(tripMembersTable.userId, body.userId)))
+      .where(and(eq(tripMembersTable.tripId, trip.id), eq(tripMembersTable.userId, userId)))
       .limit(1);
 
     if (existing.length > 0) {
@@ -192,7 +224,7 @@ router.post("/trips/join", async (req, res) => {
       return;
     }
 
-    await db.insert(tripMembersTable).values({ tripId: trip.id, userId: body.userId });
+    await db.insert(tripMembersTable).values({ tripId: trip.id, userId });
     res.json(trip);
   } catch (err) {
     req.log.error({ err }, "Error joining trip");
@@ -200,15 +232,12 @@ router.post("/trips/join", async (req, res) => {
   }
 });
 
-router.get("/trips/:tripId", async (req, res) => {
+router.get("/trips/:tripId", requireAuth, requireTripMember, async (req, res) => {
   try {
-    const { tripId } = GetTripParams.parse({ tripId: req.params.tripId });
+    const tripId = parseInt(req.params.tripId);
 
     const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
-    if (!trip) {
-      res.status(404).json({ error: "Voyage introuvable" });
-      return;
-    }
+    if (!trip) { res.status(404).json({ error: "Voyage introuvable" }); return; }
 
     const membersWithNames = await db
       .select({
@@ -228,24 +257,22 @@ router.get("/trips/:tripId", async (req, res) => {
       .where(eq(eventsTable.tripId, tripId))
       .orderBy(eventsTable.date, eventsTable.startTime);
 
-    res.json({
-      ...trip,
-      members: membersWithNames,
-      events,
-    });
+    res.json({ ...trip, members: membersWithNames, events });
   } catch (err) {
     req.log.error({ err }, "Error getting trip");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.delete("/trips/:tripId", async (req, res) => {
+router.delete("/trips/:tripId", requireAuth, requireTripMember, async (req, res) => {
   try {
     const { tripId } = DeleteTripParams.parse({ tripId: req.params.tripId });
 
     const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
-    if (!trip) {
-      res.status(404).json({ error: "Voyage introuvable" });
+    if (!trip) { res.status(404).json({ error: "Voyage introuvable" }); return; }
+
+    if (trip.creatorId !== req.user!.userId) {
+      res.status(403).json({ error: "Seul le créateur peut supprimer ce voyage." });
       return;
     }
 
@@ -253,13 +280,13 @@ router.delete("/trips/:tripId", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting trip");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.get("/trips/:tripId/members", async (req, res) => {
+router.get("/trips/:tripId/members", requireAuth, requireTripMember, async (req, res) => {
   try {
-    const { tripId } = GetTripMembersParams.parse({ tripId: req.params.tripId });
+    const tripId = parseInt(req.params.tripId);
 
     const members = await db
       .select({
@@ -276,11 +303,11 @@ router.get("/trips/:tripId/members", async (req, res) => {
     res.json(members);
   } catch (err) {
     req.log.error({ err }, "Error getting members");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.get("/trips/:tripId/events", async (req, res) => {
+router.get("/trips/:tripId/events", requireAuth, requireTripMember, async (req, res) => {
   try {
     const { tripId } = GetTripEventsParams.parse({ tripId: req.params.tripId });
 
@@ -293,20 +320,18 @@ router.get("/trips/:tripId/events", async (req, res) => {
     res.json(events);
   } catch (err) {
     req.log.error({ err }, "Error getting events");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.post("/trips/:tripId/events", async (req, res) => {
+router.post("/trips/:tripId/events", requireAuth, requireTripMember, async (req, res) => {
   try {
     const { tripId } = CreateEventParams.parse({ tripId: req.params.tripId });
     const body = CreateEventBody.parse(req.body);
+    const userId = req.user!.userId;
 
     const [trip] = await db.select().from(tripsTable).where(eq(tripsTable.id, tripId)).limit(1);
-    if (!trip) {
-      res.status(404).json({ error: "Voyage introuvable" });
-      return;
-    }
+    if (!trip) { res.status(404).json({ error: "Voyage introuvable" }); return; }
 
     const [event] = await db
       .insert(eventsTable)
@@ -325,39 +350,32 @@ router.post("/trips/:tripId/events", async (req, res) => {
         lodgingData: body.lodgingData ?? null,
         restaurationData: body.restaurationData ?? null,
         activiteData: body.activiteData ?? null,
-        creatorId: body.creatorId,
+        creatorId: userId,
       })
       .returning();
 
     res.status(201).json(event);
   } catch (err) {
     req.log.error({ err }, "Error creating event");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-const UpdateEventBody = z.object({
-  title: z.string().min(1).optional(),
-  date: z.string().optional(),
-  startTime: z.string().optional().nullable(),
-  endTime: z.string().optional().nullable(),
-  location: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-  pricePerPerson: z.number().optional().nullable(),
-  priceType: z.string().optional().nullable(),
-});
-
-router.put("/trips/:tripId/events/:eventId", async (req, res) => {
+router.put("/trips/:tripId/events/:eventId", requireAuth, requireTripMember, async (req, res) => {
   try {
     const tripId = parseInt(req.params.tripId);
     const eventId = parseInt(req.params.eventId);
     const body = UpdateEventBody.parse(req.body);
 
-    const [event] = await db.select().from(eventsTable)
-      .where(and(eq(eventsTable.id, eventId), eq(eventsTable.tripId, tripId))).limit(1);
+    const [event] = await db
+      .select()
+      .from(eventsTable)
+      .where(and(eq(eventsTable.id, eventId), eq(eventsTable.tripId, tripId)))
+      .limit(1);
     if (!event) { res.status(404).json({ error: "Événement introuvable" }); return; }
 
-    const [updated] = await db.update(eventsTable)
+    const [updated] = await db
+      .update(eventsTable)
       .set({
         ...(body.title !== undefined && { title: body.title }),
         ...(body.date !== undefined && { date: body.date }),
@@ -374,11 +392,11 @@ router.put("/trips/:tripId/events/:eventId", async (req, res) => {
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Error updating event");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-router.delete("/trips/:tripId/events/:eventId", async (req, res) => {
+router.delete("/trips/:tripId/events/:eventId", requireAuth, requireTripMember, async (req, res) => {
   try {
     const { tripId, eventId } = DeleteEventParams.parse({
       tripId: req.params.tripId,
@@ -391,27 +409,19 @@ router.delete("/trips/:tripId/events/:eventId", async (req, res) => {
       .where(and(eq(eventsTable.id, eventId), eq(eventsTable.tripId, tripId)))
       .limit(1);
 
-    if (!event) {
-      res.status(404).json({ error: "Événement introuvable" });
-      return;
-    }
+    if (!event) { res.status(404).json({ error: "Événement introuvable" }); return; }
 
     await db.delete(eventsTable).where(eq(eventsTable.id, eventId));
     res.json({ success: true });
   } catch (err) {
     req.log.error({ err }, "Error deleting event");
-    res.status(400).json({ error: "Requête invalide" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-// ─── Trip Chat ────────────────────────────────────────────────────────────────
-const ChatMessageBody = z.object({
-  userId: z.coerce.number().int(),
-  username: z.string().min(1),
-  content: z.string().min(1).max(2000),
-});
+// ─── Trip Chat ─────────────────────────────────────────────────────────────────
 
-router.get("/trips/:tripId/chat", async (req, res) => {
+router.get("/trips/:tripId/chat", requireAuth, requireTripMember, async (req, res) => {
   try {
     const tripId = parseInt(req.params.tripId);
     const msgs = await db
@@ -427,13 +437,15 @@ router.get("/trips/:tripId/chat", async (req, res) => {
   }
 });
 
-router.post("/trips/:tripId/chat", async (req, res) => {
+router.post("/trips/:tripId/chat", requireAuth, requireTripMember, async (req, res) => {
   try {
     const tripId = parseInt(req.params.tripId);
     const body = ChatMessageBody.parse(req.body);
+    const { userId, username } = req.user!;
+
     const [msg] = await db
       .insert(tripChatMessagesTable)
-      .values({ tripId, userId: body.userId, username: body.username, content: body.content })
+      .values({ tripId, userId, username, content: body.content })
       .returning();
     res.status(201).json(msg);
   } catch (err) {

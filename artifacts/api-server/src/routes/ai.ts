@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { speechToText, textToSpeech, ensureCompatibleFormat } from "@workspace/integrations-openai-ai-server/audio";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 // POST /api/ai/translate
 // Body: { audioBase64: string, mimeType: string, targetLang: string, targetLangName: string, destination: string }
