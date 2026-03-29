@@ -436,7 +436,7 @@ router.post("/ai/import-reservation", async (req, res) => {
     if (!openai) { aiUnavailable(res); return; }
 
     const { mode, imageBase64, mimeType, emailText, reservationNumber, provider, tripStartDate } = req.body as {
-      mode: "file" | "text";
+      mode: "file" | "text" | "email";
       imageBase64?: string;
       mimeType?: string;
       emailText?: string;
@@ -466,8 +466,35 @@ router.post("/ai/import-reservation", async (req, res) => {
 }`;
 
     let messages: any[];
+    const isEmail = mode === "email" || (mode === "text" && !imageBase64);
+    const isFile = (mode === "file") && imageBase64 && mimeType;
+    const isPdf = isFile && mimeType === "application/pdf";
 
-    if (mode === "file" && imageBase64 && mimeType) {
+    if (isPdf) {
+      const { default: pdfParse } = await import("pdf-parse");
+      const pdfBuffer = Buffer.from(imageBase64!, "base64");
+      let pdfText = "";
+      try {
+        const parsed = await pdfParse(pdfBuffer);
+        pdfText = parsed.text?.trim() ?? "";
+      } catch {
+        pdfText = "";
+      }
+      const context = [
+        pdfText ? `CONTENU DU PDF :\n${pdfText}` : "PDF illisible ou vide.",
+        tripStartDate ? `DATE DU VOYAGE (référence) : ${tripStartDate}` : null,
+      ].filter(Boolean).join("\n\n");
+      messages = [
+        {
+          role: "system",
+          content: "Tu es un expert en analyse de documents de voyage (PDF de billets, confirmations). Extrais les informations structurées. Réponds UNIQUEMENT en JSON valide sans markdown.",
+        },
+        {
+          role: "user",
+          content: `Analyse ce document PDF de voyage et extrais les données :\n\n${context}\n\nRéponds UNIQUEMENT en JSON avec ce schéma :\n${jsonSchema}`,
+        },
+      ];
+    } else if (isFile) {
       messages = [
         {
           role: "system",

@@ -231,17 +231,6 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-const IMPORT_PROVIDERS = [
-  "Booking.com", "Airbnb", "Expedia", "Hotels.com", "Abritel / Vrbo",
-  "Air France", "easyJet", "Ryanair", "Vueling", "Transavia", "Corsair",
-  "SNCF Connect", "Eurostar", "Thalys / Eurostar",
-  "FlixBus", "BlaBlaBus",
-  "Europcar", "Avis", "Hertz", "Sixt", "BSP Auto", "Rentalcars",
-  "GetYourGuide", "Viator", "Ticketmaster", "Klook",
-  "TheFork", "OpenTable",
-  "Autre",
-];
-
 export function ImportReservationSection({
   onDirectAdd,
   tripStartDate,
@@ -249,17 +238,17 @@ export function ImportReservationSection({
   onDirectAdd: (data: any) => void;
   tripStartDate: string;
 }) {
-  const [mode, setMode] = useState<"file" | "text">("file");
+  const [mode, setMode] = useState<"file" | "email">("file");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [emailText, setEmailText] = useState("");
-  const [reservationNumber, setReservationNumber] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isPdf = file?.type === "application/pdf";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -269,11 +258,18 @@ export function ImportReservationSection({
     setError(null);
     setConfirmed(false);
     if (f.type.startsWith("image/")) {
-      const url = URL.createObjectURL(f);
-      setFilePreview(url);
+      setFilePreview(URL.createObjectURL(f));
     } else {
       setFilePreview(null);
     }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    const fakeEvent = { target: { files: [f] } } as any;
+    handleFileChange(fakeEvent);
   };
 
   const handleAnalyze = async () => {
@@ -286,23 +282,17 @@ export function ImportReservationSection({
       let body: any;
 
       if (mode === "file") {
-        if (!file) { setError("Veuillez sélectionner une image."); setLoading(false); return; }
+        if (!file) { setError("Veuillez sélectionner un fichier."); setLoading(false); return; }
         const dataUrl = await fileToBase64(file);
         const base64 = dataUrl.split(",")[1];
         body = { mode: "file", imageBase64: base64, mimeType: file.type, tripStartDate };
       } else {
-        if (!emailText.trim() && !reservationNumber.trim()) {
-          setError("Veuillez coller votre email de confirmation ou saisir un numéro de réservation.");
+        if (!emailText.trim()) {
+          setError("Veuillez coller le contenu de votre e-mail de confirmation.");
           setLoading(false);
           return;
         }
-        body = {
-          mode: "text",
-          emailText: emailText.trim() || undefined,
-          reservationNumber: reservationNumber.trim() || undefined,
-          provider: selectedProvider || undefined,
-          tripStartDate,
-        };
+        body = { mode: "email", emailText: emailText.trim(), tripStartDate };
       }
 
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("r2g_token") : null;
@@ -354,15 +344,13 @@ export function ImportReservationSection({
     setFile(null);
     setFilePreview(null);
     setEmailText("");
-    setReservationNumber("");
-    setSelectedProvider("");
     setResult(null);
     setError(null);
     setConfirmed(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const canAnalyze = mode === "file" ? !!file : (!!emailText.trim() || !!reservationNumber.trim());
+  const canAnalyze = mode === "file" ? !!file : !!emailText.trim();
 
   return (
     <div className="mt-3">
@@ -373,7 +361,7 @@ export function ImportReservationSection({
             <h3 className="font-bold text-sm text-slate-700">Importer une réservation</h3>
           </div>
           <p className="text-xs text-muted-foreground">
-            Importez une confirmation et l'IA crée automatiquement l'événement.
+            Importez un document ou collez votre e-mail — l'IA crée l'événement automatiquement.
           </p>
         </div>
 
@@ -388,18 +376,18 @@ export function ImportReservationSection({
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            Importer un fichier
+            Fichier
           </button>
           <button
-            onClick={() => { setMode("text"); setResult(null); setError(null); }}
+            onClick={() => { setMode("email"); setResult(null); setError(null); }}
             className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
-              mode === "text"
+              mode === "email"
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-white/70 text-foreground border-border hover:border-primary/50"
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            Numéro de réservation
+            E-mail
           </button>
         </div>
 
@@ -410,88 +398,65 @@ export function ImportReservationSection({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,application/pdf"
                 className="hidden"
                 onChange={handleFileChange}
               />
               {!file ? (
                 <button
                   onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={e => e.preventDefault()}
                   className="w-full flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border/60 hover:border-primary/50 rounded-xl py-8 text-muted-foreground hover:text-primary transition-colors bg-muted/20 hover:bg-primary/5"
                 >
                   <Upload className="w-8 h-8" />
-                  <span className="text-sm font-medium">Importer une capture d'écran</span>
-                  <span className="text-xs">Confirmation de réservation, e-ticket, billet…</span>
-                  <span className="text-[11px] bg-muted/60 px-2 py-0.5 rounded-md">JPG · PNG · WebP · HEIC</span>
+                  <span className="text-sm font-medium">Capture d'écran, PDF ou billet</span>
+                  <span className="text-xs text-center px-4">Confirmation de réservation, e-ticket, billet…</span>
+                  <span className="text-[11px] bg-muted/60 px-2 py-0.5 rounded-md">JPG · PNG · PDF · WebP · HEIC</span>
                 </button>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
-                    {filePreview ? (
-                      <img src={filePreview} alt="Aperçu" className="w-12 h-12 rounded-lg object-cover border border-border/40 shrink-0" />
-                    ) : (
-                      <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        <FileText className="w-6 h-6 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} Ko</p>
+                <div className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-2">
+                  {isPdf ? (
+                    <div className="w-12 h-12 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center shrink-0">
+                      <span className="text-xl">📄</span>
                     </div>
-                    <button onClick={handleReset} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-1">
-                      <X className="w-4 h-4" />
-                    </button>
+                  ) : filePreview ? (
+                    <img src={filePreview} alt="Aperçu" className="w-12 h-12 rounded-lg object-cover border border-border/40 shrink-0" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <FileText className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {isPdf ? "PDF" : "Image"} · {(file.size / 1024).toFixed(0)} Ko
+                    </p>
                   </div>
+                  <button onClick={handleReset} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors p-1">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               )}
             </>
           )}
 
-          {/* Text / number mode */}
-          {mode === "text" && (
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                  Site / Prestataire
-                </label>
-                <div className="relative">
-                  <select
-                    value={selectedProvider}
-                    onChange={e => setSelectedProvider(e.target.value)}
-                    className="w-full text-sm border border-border rounded-xl px-3 py-2.5 bg-background appearance-none focus:outline-none focus:ring-2 focus:ring-primary/40 text-foreground"
-                  >
-                    <option value="">Sélectionner (facultatif)</option>
-                    {IMPORT_PROVIDERS.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                  Numéro de réservation
-                </label>
-                <input
-                  type="text"
-                  value={reservationNumber}
-                  onChange={e => setReservationNumber(e.target.value)}
-                  placeholder="ex: BK-123456789, ABC123…"
-                  className="w-full text-sm border border-border rounded-xl px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                  Coller l'e-mail de confirmation <span className="font-normal normal-case text-muted-foreground/70">(facultatif mais recommandé)</span>
-                </label>
-                <textarea
-                  value={emailText}
-                  onChange={e => setEmailText(e.target.value)}
-                  placeholder="Collez ici le contenu de votre e-mail de confirmation pour une détection optimale…"
-                  rows={5}
-                  className="w-full text-sm border border-border rounded-xl px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground resize-none"
-                />
-              </div>
+          {/* Email paste mode */}
+          {mode === "email" && (
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+                Contenu de l'e-mail de confirmation
+              </label>
+              <textarea
+                value={emailText}
+                onChange={e => setEmailText(e.target.value)}
+                placeholder={"Ouvrez votre e-mail de confirmation (Booking.com, Air France, SNCF, Airbnb…),\nsélectionnez tout le texte et collez-le ici."}
+                rows={7}
+                className="w-full text-sm border border-border rounded-xl px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-muted-foreground/70 resize-none leading-relaxed"
+              />
+              {emailText.length > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-1 text-right">{emailText.length} caractères</p>
+              )}
             </div>
           )}
 
@@ -551,7 +516,6 @@ export function ImportReservationSection({
 
                   <p className="text-xs text-green-800/80 italic">{result.summary}</p>
 
-                  {/* Detected fields */}
                   {Object.keys(result.detected).length > 0 && (
                     <div className="space-y-1">
                       {Object.entries(result.detected).map(([k, v]) => (
