@@ -1116,58 +1116,61 @@ export default function TripDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100 pb-24 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-200/50 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-indigo-200/40 blur-3xl pointer-events-none" />
-      <div className="absolute top-1/3 right-1/4 w-56 h-56 rounded-full bg-sky-200/40 blur-2xl pointer-events-none" />
+    <div className="min-h-screen pb-24 relative overflow-hidden" style={{background: "linear-gradient(135deg, #e0f2fe 0%, #ede9fe 50%, #dbeafe 100%)"}}>
+      {/* Background blobs */}
+      <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full bg-blue-300/20 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-[400px] h-[400px] rounded-full bg-violet-300/15 blur-3xl pointer-events-none" />
       {/* Header */}
-      <div className="bg-primary text-primary-foreground pt-10 pb-6 px-4 rounded-b-[2.5rem] shadow-xl relative">
-        <div className="max-w-3xl mx-auto">
+      <div className="relative bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 text-white pt-safe-top shadow-2xl shadow-blue-700/30" style={{paddingTop: "env(safe-area-inset-top, 0px)"}}>
+        {/* Subtle inner glow */}
+        <div className="absolute inset-0 bg-white/5 rounded-b-[2rem]" />
+        <div className="relative max-w-3xl mx-auto px-4 pt-4 pb-5">
           {/* Top row: back + logo */}
           <div className="flex items-center justify-between mb-4">
             <Link href="/">
-              <button className="flex items-center text-primary-foreground/80 hover:text-white transition-colors">
-                <ChevronLeft className="w-5 h-5 mr-1" />
+              <button className="flex items-center gap-1 text-white/70 hover:text-white text-sm font-medium transition-colors">
+                <ChevronLeft className="w-4 h-4" />
                 Retour
               </button>
             </Link>
-            <div className="bg-white/90 backdrop-blur-sm rounded-xl px-2 py-1">
-              <img src={logoImg} alt="Ready2Go" className="h-7 w-auto" />
+            <div className="bg-white/15 backdrop-blur-md rounded-xl px-2.5 py-1">
+              <img src={logoImg} alt="Ready2Go" className="h-6 w-auto" />
             </div>
           </div>
 
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h1 className="text-3xl font-extrabold mb-1 leading-tight">{trip.name}</h1>
-              <div className="flex items-center opacity-90 text-base mb-0.5">
-                <MapPin className="w-4 h-4 mr-2" />
+          {/* Trip info */}
+          <div className="mb-4">
+            <h1 className="text-2xl font-bold leading-snug mb-1.5">{trip.name}</h1>
+            <div className="flex items-center gap-4 text-white/75 text-sm">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
                 {trip.destination}
-              </div>
-              <div className="flex items-center opacity-80 text-sm">
-                <CalendarDays className="w-4 h-4 mr-2" />
-                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "dd MMM yyyy", { locale: fr })}
-              </div>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "dd MMM yy", { locale: fr })}
+              </span>
             </div>
           </div>
 
-          {/* Composition du groupe */}
+          {/* Groupe counter */}
           <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2.5 flex-wrap">
-            <span className="text-sm font-semibold text-primary-foreground/80 mr-1">Groupe :</span>
+            <span className="text-xs font-semibold text-white/60 uppercase tracking-wider mr-1">Groupe</span>
             <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2.5 py-1">
-              <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">−</button>
-              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupSize}</span>
-              <button type="button" onClick={() => setGroupSize(n => Math.min(50, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">+</button>
-              <span className="text-xs text-primary-foreground/70 ml-1">adulte{groupSize > 1 ? "s" : ""}</span>
+              <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 font-bold text-xs hover:bg-white/30 transition-colors">−</button>
+              <span className="text-sm font-bold w-5 text-center">{groupSize}</span>
+              <button type="button" onClick={() => setGroupSize(n => Math.min(50, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 font-bold text-xs hover:bg-white/30 transition-colors">+</button>
+              <span className="text-[11px] text-white/60 ml-1">adulte{groupSize > 1 ? "s" : ""}</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white/10 rounded-xl px-2.5 py-1">
-              <button type="button" onClick={() => setGroupChildren(n => Math.max(0, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">−</button>
-              <span className="text-sm font-bold text-primary-foreground w-5 text-center">{groupChildren}</span>
-              <button type="button" onClick={() => setGroupChildren(n => Math.min(20, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-primary-foreground font-bold text-xs hover:bg-white/30 transition-colors">+</button>
-              <span className="text-xs text-primary-foreground/70 ml-1">enfant{groupChildren > 1 ? "s" : ""}</span>
+              <button type="button" onClick={() => setGroupChildren(n => Math.max(0, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 font-bold text-xs hover:bg-white/30 transition-colors">−</button>
+              <span className="text-sm font-bold w-5 text-center">{groupChildren}</span>
+              <button type="button" onClick={() => setGroupChildren(n => Math.min(20, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 font-bold text-xs hover:bg-white/30 transition-colors">+</button>
+              <span className="text-[11px] text-white/60 ml-1">enfant{groupChildren > 1 ? "s" : ""}</span>
             </div>
           </div>
         </div>
+        <div className="h-6 bg-gradient-to-b from-transparent to-blue-600/0 rounded-b-[2rem]" />
       </div>
 
       {/* ── Interactive map ─ own section below header ─────────────────── */}
