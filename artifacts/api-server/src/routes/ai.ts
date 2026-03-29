@@ -6,11 +6,19 @@ const router = Router();
 router.use(requireAuth);
 
 async function getOpenAI() {
+  const { default: OpenAI } = await import("openai");
+  // Replit AI proxy (local dev)
   const openaiUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!openaiUrl || !openaiKey) throw new Error("AI not configured");
-  const { default: OpenAI } = await import("openai");
-  return new OpenAI({ apiKey: openaiKey, baseURL: openaiUrl });
+  if (openaiUrl && openaiKey) {
+    return new OpenAI({ apiKey: openaiKey, baseURL: openaiUrl });
+  }
+  // Direct OpenAI API key (Vercel production or any other deployment)
+  const directKey = process.env.OPENAI_API_KEY;
+  if (directKey) {
+    return new OpenAI({ apiKey: directKey });
+  }
+  throw new Error("AI not configured");
 }
 
 async function getAudio() {
