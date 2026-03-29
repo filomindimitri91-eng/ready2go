@@ -55,7 +55,7 @@ router.post("/ai/translate", async (req, res) => {
     }
 
     const translationRes = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 1024,
       messages: [
         { role: "system", content: `Tu es un traducteur expert. Traduis le texte de l'utilisateur en ${targetLangName}. Destination du voyage: ${destination || "inconnue"}. Réponds UNIQUEMENT avec la traduction, sans explication ni ponctuation supplémentaire.` },
@@ -93,7 +93,7 @@ router.post("/ai/chat", async (req, res) => {
       ?? `Tu es un assistant de voyage expert et enthousiaste. Le voyage est à destination de : "${destination}". Tu aides les voyageurs à trouver des idées d'activités, de transport, de logement et de restaurants adaptés à leur destination. Réponds toujours en français, de manière concise et pratique. Utilise des emojis pour rendre tes réponses vivantes.`;
 
     const stream = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 1024,
       messages: [{ role: "system", content: system }, ...messages],
       stream: true,
@@ -179,7 +179,7 @@ FORMAT JSON (tableau plat d'événements) :
 RÈGLE PRIX : Pour les événements de type "restauration", TOUJOURS remplir avgMenuPrice (nombre entier en EUR), priceRange, priceLevel et priceSource. Ces champs sont OBLIGATOIRES pour les restaurants. Pour les autres types, omettre ces champs.`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 3000,
       messages: [
         { role: "system", content: "Tu es un assistant de planification de voyages expert. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
@@ -237,7 +237,7 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 800,
       messages: [
         { role: "system", content: "Tu es un assistant de budget voyage. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
@@ -294,7 +294,7 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 600,
       messages: [
         { role: "system", content: "Tu es un expert en gastronomie mondiale. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
@@ -331,7 +331,7 @@ router.post("/ai/transit", async (req, res) => {
     const prompt = `Propose un itineraire typique en transports en commun de "${from}" a "${to}" a ${city}. Inclus les etapes a pied. Reponds UNIQUEMENT en JSON : {"summary":"...","totalDuration":"...","steps":[{"mode":"metro|bus|tram|rer|train|marche|ferry|autre","emoji":"...","line":"...","from":"...","to":"...","duration":"...","instruction":"..."}],"tips":"..."}`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 5000,
       messages: [
         { role: "system", content: "Assistant voyage. JSON uniquement, pas de markdown." },
@@ -408,7 +408,7 @@ FORMAT JSON :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+      model: "gpt-4o-mini",
       max_completion_tokens: 3000,
       messages: [
         { role: "system", content: "Tu es un expert en événements culturels et touristiques. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
