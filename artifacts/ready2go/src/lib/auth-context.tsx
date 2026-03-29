@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { setAuthTokenGetter } from "@workspace/api-client-react";
 
 interface AuthState {
   userId: number | null;
   username: string | null;
-  login: (id: number, username: string) => void;
+  login: (id: number, username: string, token: string) => void;
   logout: () => void;
   isLoading: boolean;
 }
@@ -13,15 +14,18 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<number | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     try {
       const storedId = localStorage.getItem("r2g_userId");
       const storedUsername = localStorage.getItem("r2g_username");
-      if (storedId && storedUsername) {
+      const storedToken = localStorage.getItem("r2g_token");
+      if (storedId && storedUsername && storedToken) {
         setUserId(parseInt(storedId, 10));
         setUsername(storedUsername);
+        setToken(storedToken);
       }
     } catch (error) {
       console.error("Failed to load auth from localStorage", error);
@@ -30,18 +34,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = (id: number, name: string) => {
+  useEffect(() => {
+    setAuthTokenGetter(token ? () => token : null);
+  }, [token]);
+
+  const login = (id: number, name: string, jwtToken: string) => {
     setUserId(id);
     setUsername(name);
+    setToken(jwtToken);
     localStorage.setItem("r2g_userId", id.toString());
     localStorage.setItem("r2g_username", name);
+    localStorage.setItem("r2g_token", jwtToken);
   };
 
   const logout = () => {
     setUserId(null);
     setUsername(null);
+    setToken(null);
     localStorage.removeItem("r2g_userId");
     localStorage.removeItem("r2g_username");
+    localStorage.removeItem("r2g_token");
   };
 
   return (
