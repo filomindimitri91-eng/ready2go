@@ -1,8 +1,8 @@
 {
   "version": 2,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/ready2go run build",
-  "outputDirectory": "artifacts/ready2go/dist",
+  "buildCommand": "pnpm --filter @workspace/ready2go run build && cp -r artifacts/ready2go/dist ./dist",
+  "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" }
