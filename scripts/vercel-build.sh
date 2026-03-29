@@ -1,17 +1,25 @@
 #!/bin/bash
 set -e
 
-REPO_ROOT="$(pwd)"
-echo "Building from: $REPO_ROOT"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+echo "Repo root: $REPO_ROOT"
 
+# Build the frontend
 pnpm --filter @workspace/ready2go run build
 
+# The vite config uses fileURLToPath to resolve __dirname to the workspace dir,
+# so the dist is guaranteed to be at artifacts/ready2go/dist
 WORKSPACE_DIST="$REPO_ROOT/artifacts/ready2go/dist"
-TARGET_DIST="$REPO_ROOT/dist"
 
-echo "Copying from $WORKSPACE_DIST to $TARGET_DIST"
-mkdir -p "$TARGET_DIST"
-cp -rf "$WORKSPACE_DIST/." "$TARGET_DIST/"
+if [ ! -d "$WORKSPACE_DIST" ]; then
+  echo "ERROR: dist not found at $WORKSPACE_DIST"
+  echo "Contents of artifacts/ready2go:"
+  ls -la "$REPO_ROOT/artifacts/ready2go/"
+  exit 1
+fi
 
-echo "Build complete. Contents of dist:"
-ls "$TARGET_DIST"
+echo "Dist found at: $WORKSPACE_DIST"
+mkdir -p "$REPO_ROOT/dist"
+cp -rf "$WORKSPACE_DIST/." "$REPO_ROOT/dist/"
+echo "Copied to $REPO_ROOT/dist — contents:"
+ls "$REPO_ROOT/dist/"
