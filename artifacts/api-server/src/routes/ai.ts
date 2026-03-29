@@ -672,5 +672,40 @@ router.post("/ai/travel-news", async (req, res) => {
   }
 });
 
+// ── /api/ai/travel-tips ──────────────────────────────────────────────────────
+const tipsCache = new Map<string, { ts: number; tips: string[] }>();
+const TIPS_TTL = 60 * 60 * 1000; // 1h
+
+router.post("/ai/travel-tips", async (req, res) => {
+  try {
+    const { destination } = req.body as { destination?: string };
+    if (!destination) { res.status(400).json({ tips: [] }); return; }
+    const key = destination.toLowerCase().trim();
+    const cached = tipsCache.get(key);
+    if (cached && Date.now() - cached.ts < TIPS_TTL) { res.json({ tips: cached.tips }); return; }
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { res.json({ tips: [] }); return; }
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_completion_tokens: 500,
+      messages: [
+        { role: "system", content: "Tu es un expert conseiller voyage. Génère des conseils pratiques, courts, concrets et utiles pour voyageurs. Réponds UNIQUEMENT en JSON valide." },
+        { role: "user", content: `Génère 4 conseils pour un voyageur se rendant à ${destination}. Axe sur : pièges fréquents (transports, arnaques, météo), astuces locales, problèmes courants rapportés par les voyageurs. Chaque conseil : max 95 caractères, en français, commence par un emoji. Format : {"tips":["...","...","...","..."]}` },
+      ],
+    });
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "";
+    let tips: string[] = [];
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+      tips = JSON.parse(cleaned).tips ?? [];
+    } catch { tips = []; }
+    if (tips.length > 0) tipsCache.set(key, { ts: Date.now(), tips });
+    res.json({ tips });
+  } catch (err: any) {
+    console.error("[ai/travel-tips]", err);
+    res.status(500).json({ tips: [] });
+  }
+});
+
 export default router;
 

@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
-  ChevronLeft, Plus, MapPin, CalendarDays, Copy,
+  ChevronLeft, ChevronDown, ChevronUp, Plus, MapPin, CalendarDays, Copy,
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
   ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
@@ -940,6 +940,11 @@ export default function TripDetails() {
   const [navPoi, setNavPoi] = useState<PoiClickData | null>(null);
   const [mapSelectMode, setMapSelectMode] = useState(false);
 
+  // ─── Travel tips (header collapsible) ────────────────────────────────────
+  const [tipsOpen, setTipsOpen] = useState(false);
+  const [tips, setTips] = useState<string[]>([]);
+  const [tipsLoading, setTipsLoading] = useState(false);
+
   // ─── Member location sharing ─────────────────────────────────────────────
   const [memberLocations, setMemberLocations] = useState<MemberLocation[]>([]);
   const [isSharing, setIsSharing] = useState(false);
@@ -962,6 +967,22 @@ export default function TripDetails() {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, [tripId]);
+
+  // Fetch travel tips once when destination is known
+  useEffect(() => {
+    if (!trip?.destination) return;
+    const token = localStorage.getItem("r2g_token");
+    setTipsLoading(true);
+    fetch("/api/ai/travel-tips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ destination: trip.destination }),
+    })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data.tips) && data.tips.length > 0) setTips(data.tips); })
+      .catch(() => {})
+      .finally(() => setTipsLoading(false));
+  }, [trip?.destination]);
 
   const startSharing = () => {
     if (!navigator.geolocation) { setLocError("Géolocalisation non disponible"); return; }
@@ -1198,8 +1219,34 @@ export default function TripDetails() {
           </div>
           {/* Row 2 — trip summary */}
           {tripSummary && (
-            <div className="pb-2 overflow-x-auto no-scrollbar">
+            <div className="pb-1 overflow-x-auto no-scrollbar">
               <p className="text-[11px] text-slate-400 whitespace-nowrap select-none">{tripSummary}</p>
+            </div>
+          )}
+          {/* Row 3 — travel tips (collapsible) */}
+          {(tips.length > 0 || tipsLoading) && (
+            <div className="border-t border-white/40 pt-1 pb-1.5">
+              <button
+                type="button"
+                onClick={() => setTipsOpen(o => !o)}
+                className="flex items-center gap-1.5 w-full text-left group"
+              >
+                <span className="text-[10px] font-semibold text-violet-500/80 uppercase tracking-wider flex-1">
+                  {tipsLoading && tips.length === 0
+                    ? "💡 Chargement des conseils…"
+                    : `💡 ${tips.length} conseil${tips.length > 1 ? "s" : ""} pour ${trip?.destination ?? "ce voyage"}`}
+                </span>
+                {tipsOpen
+                  ? <ChevronUp className="w-3 h-3 text-slate-400 shrink-0" />
+                  : <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />}
+              </button>
+              {tipsOpen && tips.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {tips.map((tip, i) => (
+                    <li key={i} className="text-[11px] text-slate-600 leading-snug pl-1">{tip}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
