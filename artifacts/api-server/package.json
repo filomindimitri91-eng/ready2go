@@ -2,7 +2,6 @@
   "name": "@workspace/api-server",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
@@ -21,6 +20,7 @@
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "openai": "^6.32.0",
     "pino": "^9",
     "pino-http": "^10",
     "zod": "catalog:"

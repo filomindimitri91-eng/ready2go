@@ -55,22 +55,10 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-app.use("/api", (_req, res, next) => {
-  if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
-    res.status(503).json({ error: "Base de données non configurée. Ajoutez Vercel Postgres dans Storage → Connect to Project." });
-    return;
-  }
-  next();
-});
-
 app.use("/api", apiRateLimiter);
 app.use("/api", router);
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  if (err.message === "DATABASE_URL_MISSING") {
-    res.status(503).json({ error: "Base de données non configurée. Ajoutez DATABASE_URL dans les variables d'environnement Vercel." });
-    return;
-  }
   res.status(500).json({ error: "Erreur serveur" });
 });
 

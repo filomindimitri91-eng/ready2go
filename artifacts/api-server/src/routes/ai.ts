@@ -1,58 +1,62 @@
 import { Router } from "express";
-import { openai } from "@workspace/integrations-openai-ai-server";
-import { speechToText, textToSpeech, ensureCompatibleFormat } from "@workspace/integrations-openai-ai-server/audio";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
 router.use(requireAuth);
 
+async function getOpenAI() {
+  const openaiUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!openaiUrl || !openaiKey) throw new Error("AI not configured");
+  const { default: OpenAI } = await import("openai");
+  return new OpenAI({ apiKey: openaiKey, baseURL: openaiUrl });
+}
+
+async function getAudio() {
+  const { speechToText, textToSpeech, ensureCompatibleFormat } = await import(
+    "@workspace/integrations-openai-ai-server/audio"
+  );
+  return { speechToText, textToSpeech, ensureCompatibleFormat };
+}
+
+function aiUnavailable(res: any) {
+  res.status(503).json({ error: "Service IA non configuré sur ce déploiement." });
+}
+
 // POST /api/ai/translate
-// Body: { audioBase64: string, mimeType: string, targetLang: string, targetLangName: string, destination: string }
-// Returns: { transcription, translation, audioBase64 }
 router.post("/ai/translate", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    const audio = await getAudio().catch(() => null);
+    if (!openai || !audio) { aiUnavailable(res); return; }
+
     const { audioBase64, mimeType, targetLang, targetLangName, destination } = req.body as {
-      audioBase64: string;
-      mimeType: string;
-      targetLang: string;
-      targetLangName: string;
-      destination: string;
+      audioBase64: string; mimeType: string; targetLang: string; targetLangName: string; destination: string;
     };
 
-    if (!audioBase64) {
-      res.status(400).json({ error: "audioBase64 est requis" });
-      return;
-    }
+    if (!audioBase64) { res.status(400).json({ error: "audioBase64 est requis" }); return; }
 
     const rawBuffer = Buffer.from(audioBase64, "base64");
-    const { buffer, format } = await ensureCompatibleFormat(rawBuffer);
-
-    // 1. Transcription (STT)
-    const transcription = await speechToText(buffer, format);
+    const { buffer, format } = await audio.ensureCompatibleFormat(rawBuffer);
+    const transcription = await audio.speechToText(buffer, format);
 
     if (!transcription.trim()) {
       res.status(422).json({ error: "Aucune parole détectée dans l'enregistrement." });
       return;
     }
 
-    // 2. Translation via GPT
     const translationRes = await openai.chat.completions.create({
       model: "gpt-5-mini",
       max_completion_tokens: 1024,
       messages: [
-        {
-          role: "system",
-          content: `Tu es un traducteur expert. Traduis le texte de l'utilisateur en ${targetLangName}. Destination du voyage: ${destination || "inconnue"}. Réponds UNIQUEMENT avec la traduction, sans explication ni ponctuation supplémentaire.`,
-        },
+        { role: "system", content: `Tu es un traducteur expert. Traduis le texte de l'utilisateur en ${targetLangName}. Destination du voyage: ${destination || "inconnue"}. Réponds UNIQUEMENT avec la traduction, sans explication ni ponctuation supplémentaire.` },
         { role: "user", content: transcription },
       ],
     });
 
     const translation = translationRes.choices[0]?.message?.content?.trim() ?? "";
-
-    // 3. TTS — generate audio of the translation
-    const ttsBuffer = await textToSpeech(translation, "nova");
+    const ttsBuffer = await audio.textToSpeech(translation, "nova");
     const audioOut = ttsBuffer.toString("base64");
 
     res.json({ transcription, translation, audioBase64: audioOut });
@@ -63,13 +67,14 @@ router.post("/ai/translate", async (req, res) => {
 });
 
 // POST /api/ai/chat (streaming SSE)
-// Body: { messages: [{role, content}], destination: string, systemPrompt?: string }
 router.post("/ai/chat", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
     const { messages, destination, systemPrompt } = req.body as {
       messages: { role: "user" | "assistant"; content: string }[];
-      destination: string;
-      systemPrompt?: string;
+      destination: string; systemPrompt?: string;
     };
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -82,18 +87,13 @@ router.post("/ai/chat", async (req, res) => {
     const stream = await openai.chat.completions.create({
       model: "gpt-5-mini",
       max_completion_tokens: 1024,
-      messages: [
-        { role: "system", content: system },
-        ...messages,
-      ],
+      messages: [{ role: "system", content: system }, ...messages],
       stream: true,
     });
 
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content;
-      if (content) {
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
+      if (content) res.write(`data: ${JSON.stringify({ content })}\n\n`);
     }
 
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
@@ -106,14 +106,13 @@ router.post("/ai/chat", async (req, res) => {
 });
 
 // POST /api/ai/generate-program
-// Body: { destination, startDate, endDate, existingEvents, creatorId }
-// Returns: { events: [{type, title, date, startTime, endTime, location, notes}] }
 router.post("/ai/generate-program", async (req, res) => {
   try {
-    const { destination, startDate, endDate, existingEvents, creatorId } = req.body as {
-      destination: string;
-      startDate: string;
-      endDate: string;
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
+    const { destination, startDate, endDate, existingEvents } = req.body as {
+      destination: string; startDate: string; endDate: string;
       existingEvents: { type: string; title: string; date: string; startTime?: string; endTime?: string; location?: string }[];
       creatorId: number;
     };
@@ -185,9 +184,7 @@ RÈGLE PRIX : Pour les événements de type "restauration", TOUJOURS remplir avg
     try {
       const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
       events = JSON.parse(cleaned);
-    } catch {
-      events = [];
-    }
+    } catch { events = []; }
 
     res.json({ events });
   } catch (err: any) {
@@ -197,18 +194,14 @@ RÈGLE PRIX : Pour les événements de type "restauration", TOUJOURS remplir avg
 });
 
 // POST /api/ai/budget
-// Body: { destination, startDate, endDate, nbPeople, events, customNotes?, currency? }
-// Returns: { categories: [{label, amount, emoji}], total, currency, notes }
 router.post("/ai/budget", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
     const { destination, startDate, endDate, nbPeople, events, customNotes, currency = "EUR" } = req.body as {
-      destination: string;
-      startDate: string;
-      endDate: string;
-      nbPeople: number;
-      events: { type: string; title: string }[];
-      customNotes?: string;
-      currency?: string;
+      destination: string; startDate: string; endDate: string; nbPeople: number;
+      events: { type: string; title: string }[]; customNotes?: string; currency?: string;
     };
 
     const dayCount = Math.max(1, Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1);
@@ -261,22 +254,16 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
 });
 
 // POST /api/ai/restaurant-price
-// Body: { name, city, country, cuisine?, restoType? }
-// Returns: { avgMenuPrice, priceRange, currency, source, priceLevel }
 router.post("/ai/restaurant-price", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
     const { name, city, country, cuisine, restoType } = req.body as {
-      name: string;
-      city: string;
-      country: string;
-      cuisine?: string;
-      restoType?: string;
+      name: string; city: string; country: string; cuisine?: string; restoType?: string;
     };
 
-    if (!name || !city) {
-      res.status(400).json({ error: "name et city sont requis" });
-      return;
-    }
+    if (!name || !city) { res.status(400).json({ error: "name et city sont requis" }); return; }
 
     const restoDesc = [restoType, cuisine].filter(Boolean).join(", ") || "restaurant";
 
@@ -294,15 +281,9 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
   "priceRange": "20€ – 35€",
   "currency": "EUR",
   "priceLevel": "€€",
-  "source": "TripAdvisor" | "Google Maps" | "TheFork" | "Site officiel" | "Estimation",
-  "details": "1 phrase expliquant la fourchette (ex: plat principal entre 18€ et 28€, menus à 35€)"
-}
-
-NIVEAUX DE PRIX :
-- € : moins de 15€/pers (street food, fast food)
-- €€ : 15€ – 35€/pers (restaurant classique)
-- €€€ : 35€ – 70€/pers (restaurant gastronomique)
-- €€€€ : plus de 70€/pers (haute gastronomie)`;
+  "source": "TripAdvisor",
+  "details": "1 phrase expliquant la fourchette"
+}`;
 
     const completion = await openai.chat.completions.create({
       model: "gpt-5-mini",
@@ -330,10 +311,11 @@ NIVEAUX DE PRIX :
 });
 
 // POST /api/ai/transit
-// Body: { from, to, city, date? }
-// Returns: { itinerary: string, steps: [{mode, line, from, to, duration, instruction}], mapsUrl }
 router.post("/ai/transit", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
     const { from, to, city } = req.body as { from: string; to: string; city: string };
 
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from + ", " + city)}&destination=${encodeURIComponent(to + ", " + city)}&travelmode=transit`;
@@ -351,37 +333,24 @@ router.post("/ai/transit", async (req, res) => {
 
     const choice = completion.choices[0];
     const raw = choice?.message?.content?.trim() ?? "";
-    console.log("[ai/transit] finish_reason:", choice?.finish_reason, "len:", raw.length, "raw:", raw.slice(0, 300));
 
     let result: any = {};
     if (raw) {
       try {
-        // Strip markdown code fences if present
-        const cleaned = raw
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
-        // Find the JSON object boundaries robustly
+        const cleaned = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
         const start = cleaned.indexOf("{");
         const end = cleaned.lastIndexOf("}");
         if (start !== -1 && end !== -1) {
           result = JSON.parse(cleaned.slice(start, end + 1));
-        } else {
-          throw new Error("No JSON object found");
-        }
-      } catch (parseErr) {
-        console.error("[ai/transit] JSON parse error:", (parseErr as Error).message, "raw:", raw.slice(0, 300));
+        } else throw new Error("No JSON object found");
+      } catch {
         result = { summary: "Erreur de format — réessayez.", steps: [], tips: "" };
       }
     } else {
-      console.error("[ai/transit] Empty response from model");
       result = { summary: "Réponse vide du service IA — réessayez.", steps: [], tips: "" };
     }
 
-    // Always inject our pre-computed mapsUrl
     result.mapsUrl = mapsUrl;
-
     res.json(result);
   } catch (err: any) {
     console.error("[ai/transit]", err);
@@ -390,14 +359,13 @@ router.post("/ai/transit", async (req, res) => {
 });
 
 // POST /api/ai/events-nearby
-// Body: { destination, startDate, endDate }
-// Returns: { events: [{type, title, date, startTime, endTime, location, venue, distance, rating, reviewSource, notes, category}] }
 router.post("/ai/events-nearby", async (req, res) => {
   try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
     const { destination, startDate, endDate } = req.body as {
-      destination: string;
-      startDate: string;
-      endDate: string;
+      destination: string; startDate: string; endDate: string;
     };
 
     const prompt = `Tu es l'assistant de voyage Ready2Go, incarné par la Boussole. Tu connais parfaitement Ticketmaster, Eventbrite, Songkick, Bandsintown, les comptes Instagram/Facebook/TikTok officiels des artistes et des villes, les offices du tourisme, les clubs sportifs, et les agendas culturels locaux.
@@ -410,42 +378,23 @@ Tu DOIS toujours trouver quelque chose. Voici la hiérarchie à appliquer dans l
 2. Événements récurrents à cette période (fêtes nationales, marchés hebdomadaires, matchs de championnat selon la saison, festivals annuels)
 3. Expositions temporaires ou longue durée dans les musées locaux
 4. Expériences uniques "du moment" : visite nocturne, spectacle de rue régulier, événement gastronomique, marché artisanal
-5. EN DERNIER RECOURS : Transformer un POI permanent en expérience incontournable (ex : "Coucher de soleil depuis le belvédère X — unique en cette saison")
-
-TYPES D'ÉVÉNEMENTS :
-Concerts, festivals musicaux, matchs sportifs, tournois, Grands Prix, carnavals, fêtes locales, braderies, marchés thématiques, expositions, spectacles de rue, sons et lumières, feux d'artifice, fêtes régionales.
+5. EN DERNIER RECOURS : Transformer un POI permanent en expérience incontournable
 
 CONTRAINTES :
 - Minimum 8 suggestions — INTERDIT d'en retourner moins
-- 1 événement "incontournable" mis en avant (le plus exceptionnel/unique)
 - Adresse précise pour chaque lieu
-- Distance estimée depuis ${destination}
-- Source vérifiable (Ticketmaster, TripAdvisor, Google, Eventbrite, Instagram, Office du tourisme…)
+- Source vérifiable
 - Réponds UNIQUEMENT en JSON valide, sans markdown
 
 FORMAT JSON :
 {
-  "incontournable": {
-    "titre": "Nom de l'événement ou de l'expérience",
-    "description": "2 lignes engageantes expliquant pourquoi c'est unique à ces dates",
-    "dates": "Date(s) et horaire(s)",
-    "source": "Ticketmaster" | "Instagram" | "Office du tourisme" | "TripAdvisor" | autre,
-    "category": "concert" | "sport" | "festival" | "exposition" | "expérience" | autre
-  },
+  "incontournable": { "titre": "...", "description": "...", "dates": "...", "source": "...", "category": "..." },
   "events": [
     {
-      "category": "concert" | "sport" | "festival" | "carnaval" | "marché" | "exposition" | "spectacle" | "fête" | "expérience",
-      "title": "Nom précis",
-      "venue": "Nom du lieu",
-      "date": "YYYY-MM-DD",
-      "startTime": "HH:MM",
-      "endTime": "HH:MM",
-      "location": "Adresse complète",
-      "distance": "XX km",
-      "rating": "4.X/5",
-      "reviewSource": "Ticketmaster" | "TripAdvisor" | "Google" | "Eventbrite" | "Instagram" | "Office du tourisme" | "Notoriété locale",
-      "notes": "Artiste/équipe/thème, ambiance, billetterie, pourquoi y aller",
-      "type": "activite"
+      "category": "concert|sport|festival|carnaval|marché|exposition|spectacle|fête|expérience",
+      "title": "...", "venue": "...", "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM",
+      "location": "...", "distance": "XX km", "rating": "4.X/5", "reviewSource": "...",
+      "notes": "...", "type": "activite"
     }
   ]
 }`;
@@ -471,9 +420,7 @@ FORMAT JSON :
         incontournable = parsed.incontournable ?? null;
         events = Array.isArray(parsed.events) ? parsed.events : [];
       }
-    } catch {
-      events = [];
-    }
+    } catch { events = []; }
 
     res.json({ incontournable, events });
   } catch (err: any) {

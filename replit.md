@@ -15,7 +15,9 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Database (local dev)**: same GitHub JSON DB — uses GITHUB_TOKEN + GITHUB_DB_OWNER + GITHUB_DB_REPO env vars
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Build (local)**: esbuild → `.mjs` ESM bundle (via `artifacts/api-server/build.mjs`); `openai` marked as external
+- **Build (Vercel)**: `@vercel/node` per-file TypeScript transpilation → CJS. CRITICAL: `artifacts/api-server/package.json` must NOT have `"type": "module"` (CJS/ESM boundary fix). `api/index.ts` uses a static `import app from "../artifacts/api-server/src/app"`.
+- **Vercel production URL**: `https://ready2go-api-server.vercel.app`
 
 ## Structure
 
