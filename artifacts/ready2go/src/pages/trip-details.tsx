@@ -968,22 +968,6 @@ export default function TripDetails() {
     };
   }, [tripId]);
 
-  // Fetch travel tips once when destination is known
-  useEffect(() => {
-    if (!trip?.destination) return;
-    const token = localStorage.getItem("r2g_token");
-    setTipsLoading(true);
-    fetch("/api/ai/travel-tips", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ destination: trip.destination }),
-    })
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data.tips) && data.tips.length > 0) setTips(data.tips); })
-      .catch(() => {})
-      .finally(() => setTipsLoading(false));
-  }, [trip?.destination]);
-
   const startSharing = () => {
     if (!navigator.geolocation) { setLocError("Géolocalisation non disponible"); return; }
     setLocError(null);
@@ -1160,6 +1144,22 @@ export default function TripDetails() {
     if (daysUntil > 0) return { label: `J−${daysUntil}`, color: "bg-blue-100 text-blue-700" };
     return { label: "Terminé", color: "bg-slate-100 text-slate-500" };
   }, [trip?.startDate, trip?.endDate]);
+
+  // Fetch travel tips once when destination is known (after trip is declared)
+  useEffect(() => {
+    if (!trip?.destination) return;
+    const token = localStorage.getItem("r2g_token");
+    setTipsLoading(true);
+    fetch("/api/ai/travel-tips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ destination: trip.destination }),
+    })
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data.tips) && data.tips.length > 0) setTips(data.tips); })
+      .catch(() => {})
+      .finally(() => setTipsLoading(false));
+  }, [trip?.destination]);
 
   const sortedDates = Object.keys(groupedEvents).sort();
 
