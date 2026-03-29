@@ -57,33 +57,39 @@ A travel planning app in French where users can:
 - Username-only authentication (stored in localStorage)
 - Create/join trips via 8-char invite codes
 - 5 event types: activité, transport, logement, restauration, autre
-- Per-event pricing with `pricePerPerson` (null=unset, 0=gratuit, positive=price) and `priceType` (per_person/per_adult/per_child/per_couple/per_group)
-- Edit events via modal (PUT endpoint)
+- Per-event pricing with `pricePerPerson` and `priceType` (per_person/per_adult/per_group)
+- Events can be `forAll: true` (partagé avec tous) or personal (`participantIds: [userId]`)
+- Edit events via modal (PUT endpoint); admins can edit any event, members can edit personal ones
+- **Participant profiles**: selector in Programme tab (filter events per participant)
+- **Admin system**: creator auto-assigned admin role; admins can promote/demote (max 4 admins)
+- Groupe tab: "Administrateurs" section with promote/demote buttons; role badges
+- Budget tab: "Par participant" view (2+ members) shows per-member cost breakdown
 - Budget tab with adults/children count, per-event cost breakdown, and AI estimation
-- AI estimation accepts custom notes for context
 - Map-based location search (Nominatim/OpenStreetMap)
 - Group tab with invite code + real-time member location sharing
+- Tab order: Programme > Budget > Groupe > Assistant
 
 ### API Endpoints
 - `POST /api/users` - Create or find user by username
 - `GET /api/users/:userId` - Get user
 - `GET /api/trips?userId=X` - Get trips for user
-- `POST /api/trips` - Create trip (auto-generates 8-char invite code)
+- `POST /api/trips` - Create trip (auto-generates 8-char invite code; creator becomes admin)
 - `POST /api/trips/join` - Join trip with invite code
-- `GET /api/trips/:tripId` - Trip details with members and events
-- `DELETE /api/trips/:tripId` - Delete trip
-- `GET /api/trips/:tripId/members` - Get members
+- `GET /api/trips/:tripId` - Trip details with members (incl. roles) and events
+- `DELETE /api/trips/:tripId` - Delete trip (creator only)
+- `GET /api/trips/:tripId/members` - Get members with roles
+- `PATCH /api/trips/:tripId/members/:userId/role` - Change member role (admin only, max 4 admins)
 - `GET /api/trips/:tripId/events` - Get events
-- `POST /api/trips/:tripId/events` - Create event
-- `PUT /api/trips/:tripId/events/:eventId` - Update event
+- `POST /api/trips/:tripId/events` - Create event (supports forAll, participantIds)
+- `PUT /api/trips/:tripId/events/:eventId` - Update event (permission-aware)
 - `DELETE /api/trips/:tripId/events/:eventId` - Delete event
 - `POST /api/ai/budget` - AI budget estimation (accepts customNotes)
 
-### DB Schema
-- `users` - id, username (unique), created_at
-- `trips` - id, name, destination, description, start_date, end_date, invite_code (unique, 8 chars), creator_id
-- `trip_members` - id, trip_id, user_id, joined_at
-- `events` - id, trip_id, type, title, location, date, start_time, end_time, notes, creator_id, price_per_person (real), price_type (text), created_at
+### DB Schema (GitHub JSON DB)
+- `users` - id, username (unique), createdAt
+- `trips` - id, name, destination, description, startDate, endDate, inviteCode (unique, 8 chars), creatorId
+- `members` - id, tripId, userId, **role** ("member"|"admin"), joinedAt
+- `events` - id, tripId, type, title, location, date, startTime, endTime, notes, creatorId, pricePerPerson, priceType, **forAll** (boolean), **participantIds** (number[]|null), transportData, lodgingData, restaurationData, activiteData, createdAt
 
 ### Key Components
 - `artifacts/ready2go/src/pages/trip-details.tsx` — main trip page (5 tabs)
