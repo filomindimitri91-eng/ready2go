@@ -498,7 +498,7 @@ router.post("/ai/import-reservation", async (req, res) => {
     const isPdf = isFile && mimeType === "application/pdf";
 
     if (isPdf) {
-      const { default: pdfParse } = await import("pdf-parse");
+      const _pdfMod: any = await import("pdf-parse"); const pdfParse: any = _pdfMod.default ?? _pdfMod;
       const pdfBuffer = Buffer.from(imageBase64!, "base64");
       let pdfText = "";
       try {
@@ -634,7 +634,7 @@ router.post("/ai/parse-trip", async (req, res) => {
     const isPdf = mode === "file" && mimeType === "application/pdf";
 
     if (isPdf && imageBase64) {
-      const { default: pdfParse } = await import("pdf-parse");
+      const _pdfMod: any = await import("pdf-parse"); const pdfParse: any = _pdfMod.default ?? _pdfMod;
       const pdfBuffer = Buffer.from(imageBase64, "base64");
       let pdfText = "";
       try { const parsed = await pdfParse(pdfBuffer); pdfText = parsed.text?.trim() ?? ""; } catch { pdfText = ""; }

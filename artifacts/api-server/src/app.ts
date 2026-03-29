@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGIN
   ? [process.env.ALLOWED_ORIGIN]
   : ["http://localhost:21626", "http://localhost:5173"];
 
-const app: Express = express();
+const app = express();
 
 app.set("trust proxy", 1);
 

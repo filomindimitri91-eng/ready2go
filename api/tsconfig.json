@@ -4,17 +4,26 @@
     "module": "CommonJS",
     "lib": ["ES2022"],
     "strict": false,
+    "noEmitOnError": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
+    "moduleResolution": "node",
     "outDir": "dist",
     "baseUrl": "..",
     "paths": {
-      "@workspace/db": ["lib/db/src"],
-      "@workspace/api-zod": ["lib/api-zod/src"],
-      "@workspace/integrations-openai-ai-server": ["lib/integrations/openai-ai-server/src"]
+      "@workspace/integrations-openai-ai-server": ["lib/integrations-openai-ai-server/src/index.ts"],
+      "@workspace/integrations-openai-ai-server/audio": ["lib/integrations-openai-ai-server/src/audio/index.ts"],
+      "@workspace/integrations-openai-ai-server/batch": ["lib/integrations-openai-ai-server/src/batch/index.ts"],
+      "@workspace/integrations-openai-ai-server/image": ["lib/integrations-openai-ai-server/src/image/index.ts"],
+      "@workspace/api-zod": ["lib/api-zod/src/index.ts"],
+      "@workspace/db": ["lib/db/src/index.ts"]
     }
   },
-  "include": ["*.ts", "../artifacts/api-server/src/**/*.ts", "../lib/**/*.ts"]
+  "include": [
+    "*.ts",
+    "../artifacts/api-server/src/**/*.ts",
+    "../lib/integrations-openai-ai-server/src/**/*.ts"
+  ]
 }

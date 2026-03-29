@@ -220,8 +220,9 @@ export async function isMember(tripId: number, userId: number): Promise<boolean>
   return all.some((m) => m.tripId === tripId && m.userId === userId);
 }
 
-export async function addMember(data: Omit<TripMember, "id" | "joinedAt"> & { role?: "member" | "admin" }): Promise<TripMember> {
-  const member: TripMember = { id: genId(), role: data.role ?? "member", ...data, joinedAt: new Date().toISOString() };
+export async function addMember(data: Omit<TripMember, "id" | "joinedAt" | "role"> & { role?: "member" | "admin" }): Promise<TripMember> {
+  const { role: _unused, ...rest } = data;
+  const member: TripMember = { id: genId(), ...rest, role: data.role ?? "member", joinedAt: new Date().toISOString() };
   await modifyArr<TripMember>("data/members.json", (arr) => [...arr, member]);
   return member;
 }
