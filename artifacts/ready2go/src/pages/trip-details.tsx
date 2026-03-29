@@ -39,6 +39,7 @@ import { NavButtons } from "@/components/nav-buttons";
 import { BudgetTab } from "@/components/budget-tab";
 import { DeplacerTab } from "@/components/deplacer-tab";
 import { PriceSection, PRICE_TYPE_LABEL } from "@/components/price-section";
+import { BookingLinksSection, ImportReservationSection } from "@/components/booking-section";
 import logoImg from "@/assets/logo.png";
 
 // ─── Timezone-safe date parser ────────────────────────────────────────────────
@@ -1060,6 +1061,10 @@ export default function TripDetails() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleDirectEventAdd = (data: any) => {
+    createEventMutation.mutate({ tripId, data: { ...data, creatorId: userId! } as any });
+  };
+
   const openFromBooking = (eventType: EventType, subtype?: string) => {
     setAddEventType(eventType);
     if (eventType === "transport") {
@@ -1263,6 +1268,10 @@ export default function TripDetails() {
                     Commencez à ajouter des activités, transports ou logements à votre voyage.
                   </p>
                   <BookingLinksSection onAddFromBooking={openFromBooking} />
+                  <ImportReservationSection
+                    onDirectAdd={handleDirectEventAdd}
+                    tripStartDate={trip.startDate}
+                  />
                 </div>
               ) : (
                 <>
@@ -1331,6 +1340,10 @@ export default function TripDetails() {
                   </div>
                 ))}
                 <BookingLinksSection onAddFromBooking={openFromBooking} />
+                <ImportReservationSection
+                  onDirectAdd={handleDirectEventAdd}
+                  tripStartDate={trip.startDate}
+                />
                 </>
               )}
             </div>
@@ -1946,137 +1959,3 @@ function EditEventModal({ event, tripId, onClose, onSuccess }: {
   );
 }
 
-// ─── Booking Links Section ────────────────────────────────────────────────────
-
-const BOOKING_PARTNERS = [
-  {
-    key: "skyscanner",
-    label: "Skyscanner",
-    subtitle: "Vols",
-    emoji: "✈️",
-    bgClass: "bg-cyan-50 border-cyan-200",
-    url: "https://www.skyscanner.fr/",
-    eventType: "transport" as EventType,
-    subtype: "plane",
-  },
-  {
-    key: "bsp-auto",
-    label: "bsp-auto.com",
-    subtitle: "Location voiture",
-    emoji: "🚗",
-    bgClass: "bg-orange-50 border-orange-200",
-    url: "https://www.bsp-auto.com/",
-    eventType: "transport" as EventType,
-    subtype: "carRental",
-  },
-  {
-    key: "booking",
-    label: "Booking.com",
-    subtitle: "Hôtels",
-    emoji: "🏨",
-    bgClass: "bg-blue-50 border-blue-200",
-    url: "https://www.booking.com/",
-    eventType: "logement" as EventType,
-    subtype: "hotel",
-  },
-  {
-    key: "ticketmaster",
-    label: "Ticketmaster",
-    subtitle: "Concerts & Événements",
-    emoji: "🎤",
-    bgClass: "bg-red-50 border-red-200",
-    url: "https://www.ticketmaster.fr/",
-    eventType: "activite" as EventType,
-    subtype: "concert",
-  },
-  {
-    key: "skiset",
-    label: "Skiset.com",
-    subtitle: "Location de ski",
-    emoji: "⛷️",
-    bgClass: "bg-sky-50 border-sky-200",
-    url: "https://www.skiset.com/",
-    eventType: "activite" as EventType,
-    subtype: "randonnee",
-  },
-  {
-    key: "clickandboat",
-    label: "Click&Boat",
-    subtitle: "Location de bateaux",
-    emoji: "⛵",
-    bgClass: "bg-teal-50 border-teal-200",
-    url: "https://www.clickandboat.com/",
-    eventType: "activite" as EventType,
-    subtype: "parc",
-  },
-  {
-    key: "padi",
-    label: "PADI Travel",
-    subtitle: "Plongée",
-    emoji: "🤿",
-    bgClass: "bg-indigo-50 border-indigo-200",
-    url: "https://travel.padi.com/",
-    eventType: "activite" as EventType,
-    subtype: "randonnee",
-  },
-  {
-    key: "alltrails",
-    label: "AllTrails",
-    subtitle: "Randonnées & sentiers",
-    emoji: "🥾",
-    bgClass: "bg-green-50 border-green-200",
-    url: "https://www.alltrails.com/",
-    eventType: "activite" as EventType,
-    subtype: "randonnee",
-  },
-];
-
-function BookingLinksSection({ onAddFromBooking }: {
-  onAddFromBooking: (type: EventType, subtype?: string) => void;
-}) {
-  return (
-    <div className="mt-6 pb-4">
-      <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-base">🔗</span>
-          <h3 className="font-bold text-sm text-slate-700">Réserver en ligne</h3>
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          Réservez via nos partenaires et ajoutez votre réservation directement au programme.
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          {BOOKING_PARTNERS.map(p => (
-            <div key={p.key} className={`rounded-xl border p-3 flex flex-col gap-2.5 ${p.bgClass}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-lg leading-none">{p.emoji}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold truncate leading-tight">{p.label}</p>
-                  <p className="text-[11px] text-muted-foreground leading-tight">{p.subtitle}</p>
-                </div>
-              </div>
-              <div className="flex gap-1.5">
-                <a
-                  href={p.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold bg-white/80 hover:bg-white border border-white/60 rounded-lg px-2 py-1.5 text-foreground transition-all"
-                >
-                  <ExternalLink className="w-3 h-3 shrink-0" />
-                  Réserver
-                </a>
-                <button
-                  type="button"
-                  onClick={() => onAddFromBooking(p.eventType, p.subtype)}
-                  className="flex-1 flex items-center justify-center gap-1 text-[11px] font-semibold bg-primary text-primary-foreground rounded-lg px-2 py-1.5 transition-all hover:opacity-90"
-                >
-                  <Plus className="w-3 h-3 shrink-0" />
-                  Ajouter
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}

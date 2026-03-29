@@ -429,4 +429,110 @@ FORMAT JSON :
   }
 });
 
+// POST /api/ai/import-reservation
+router.post("/ai/import-reservation", async (req, res) => {
+  try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
+    const { mode, imageBase64, mimeType, emailText, reservationNumber, provider, tripStartDate } = req.body as {
+      mode: "file" | "text";
+      imageBase64?: string;
+      mimeType?: string;
+      emailText?: string;
+      reservationNumber?: string;
+      provider?: string;
+      tripStartDate?: string;
+    };
+
+    const jsonSchema = `{
+  "eventType": "transport" | "logement" | "restauration" | "activite" | "autre",
+  "title": "Nom court et clair de l'événement",
+  "date": "YYYY-MM-DD (date principale de l'événement)",
+  "startTime": "HH:MM ou null",
+  "endTime": "HH:MM ou null",
+  "location": "adresse ou lieu ou null",
+  "notes": "informations complémentaires ou null",
+  "pricePerPerson": nombre ou null,
+  "bookingReference": "numéro de réservation ou null",
+  "providerName": "nom du site/prestataire ou null",
+  "transportData": { "transportType": "plane|train|bus|ferry|carRental|taxi|metro|other", "provider": "...", "vehicleNumber": "...", "departureLocation": "...", "arrivalLocation": "...", "departureTime": "HH:MM", "arrivalTime": "HH:MM", "arrivalDate": "YYYY-MM-DD ou null", "seat": "...", "bookingReference": "..." } ou null,
+  "lodgingData": { "lodgingType": "hotel|airbnb|rental|camping|hostel|guesthouse|other", "name": "...", "address": "...", "city": "...", "country": "...", "checkInDate": "YYYY-MM-DD", "checkInTime": "HH:MM", "checkOutDate": "YYYY-MM-DD", "checkOutTime": "HH:MM", "bookingProvider": "...", "bookingReference": "...", "roomType": "..." } ou null,
+  "restaurationData": { "restoType": "restaurant|brasserie|bistrot|cafe|fastFood|gastronomique|pizzeria|sushi|other", "name": "...", "address": "...", "city": "...", "guestCount": nombre, "bookingReference": "..." } ou null,
+  "activiteData": { "activiteType": "visite|musee|randonnee|plage|sport|concert|spectacle|parc|autre", "name": "...", "address": "...", "city": "..." } ou null,
+  "summary": "Résumé humain en 1 phrase (ex: Hôtel à Paris du 10 au 15 juin, réf: ABC123)",
+  "confidence": 0.0 à 1.0,
+  "detected": { "Champ humain": "Valeur détectée", ... }
+}`;
+
+    let messages: any[];
+
+    if (mode === "file" && imageBase64 && mimeType) {
+      messages = [
+        {
+          role: "system",
+          content: `Tu es un expert en analyse de documents de voyage (billets, confirmations de réservation, e-tickets). Extrais les informations structurées de l'image. Réponds UNIQUEMENT en JSON valide sans markdown. Date du voyage (si non trouvée dans l'image) : ${tripStartDate ?? "inconnue"}.`,
+        },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "high" } },
+            { type: "text", text: `Analyse ce document de voyage et extrais toutes les informations. Réponds UNIQUEMENT en JSON valide avec ce schéma :\n${jsonSchema}` },
+          ],
+        },
+      ];
+    } else {
+      const context = [
+        emailText ? `EMAIL DE CONFIRMATION :\n${emailText}` : null,
+        reservationNumber ? `NUMÉRO DE RÉSERVATION : ${reservationNumber}` : null,
+        provider ? `SITE / PRESTATAIRE : ${provider}` : null,
+        tripStartDate ? `DATE DU VOYAGE (référence) : ${tripStartDate}` : null,
+      ].filter(Boolean).join("\n\n");
+
+      messages = [
+        {
+          role: "system",
+          content: "Tu es un expert en analyse de confirmations de voyage. Extrais les informations structurées. Réponds UNIQUEMENT en JSON valide sans markdown.",
+        },
+        {
+          role: "user",
+          content: `Analyse ces informations de réservation et extrais les données structurées :\n\n${context}\n\nRéponds UNIQUEMENT en JSON avec ce schéma :\n${jsonSchema}`,
+        },
+      ];
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_completion_tokens: 2000,
+      messages,
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let result: any = {};
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+      result = JSON.parse(cleaned);
+    } catch {
+      result = {
+        eventType: "autre",
+        title: "Réservation importée",
+        date: tripStartDate ?? new Date().toISOString().slice(0, 10),
+        summary: "Impossible d'analyser le document.",
+        confidence: 0,
+        detected: {},
+      };
+    }
+
+    if (!result.date) result.date = tripStartDate ?? new Date().toISOString().slice(0, 10);
+    if (!result.eventType) result.eventType = "autre";
+    if (!result.title) result.title = "Réservation importée";
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[ai/import-reservation]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
 export default router;
+
