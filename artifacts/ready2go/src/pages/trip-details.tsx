@@ -8,7 +8,8 @@ import {
   Trash2, Loader2, CheckCircle2,
   Tent, Plane, Home as HomeIcon, List,
   ArrowRight, Paperclip, Clock, UtensilsCrossed, ExternalLink,
-  RefreshCw, Pencil, FileDown, Mail, MessageSquare, Share2
+  RefreshCw, Pencil, FileDown, Mail, MessageSquare, Share2,
+  Shield, Crown, Users, UserCheck
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -925,7 +926,9 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "budget" | "group" | "help">("program");
+  const [selectedParticipantId, setSelectedParticipantId] = useState<number | null>(null);
+  const [roleUpdating, setRoleUpdating] = useState<number | null>(null);
   const [groupSize, setGroupSize] = useState(2);
   const [groupChildren, setGroupChildren] = useState(0);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
@@ -1103,14 +1106,42 @@ export default function TripDetails() {
     },
   });
 
+  // ─── Role & admin helpers ─────────────────────────────────────────────────
+  const myMember = useMemo(() => (trip?.members ?? []).find((m: any) => m.userId === userId), [trip?.members, userId]);
+  const myRole: "member" | "admin" = (myMember as any)?.role ?? "member";
+  const isAdmin = myRole === "admin";
+
+  const updateMemberRole = async (targetUserId: number, role: "member" | "admin") => {
+    setRoleUpdating(targetUserId);
+    try {
+      await fetch(`/api/trips/${tripId}/members/${targetUserId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetTripQueryKey(tripId) });
+    } catch {}
+    setRoleUpdating(null);
+  };
+
+  // ─── Event grouping & filtering ───────────────────────────────────────────
+  const filteredEvents = useMemo(() => {
+    if (!trip?.events) return [];
+    if (selectedParticipantId === null) return trip.events as Event[];
+    return (trip.events as any[]).filter((e: any) => {
+      if (e.forAll) return true;
+      if (!e.participantIds || e.participantIds.length === 0) return e.creatorId === selectedParticipantId;
+      return (e.participantIds as number[]).includes(selectedParticipantId);
+    }) as Event[];
+  }, [trip?.events, selectedParticipantId]);
+
   const groupedEvents = useMemo(() => {
-    if (!trip?.events) return {};
-    return trip.events.reduce((acc: Record<string, Event[]>, event) => {
+    return filteredEvents.reduce((acc: Record<string, Event[]>, event) => {
       if (!acc[event.date]) acc[event.date] = [];
       acc[event.date].push(event);
       return acc;
     }, {});
-  }, [trip?.events]);
+  }, [filteredEvents]);
 
   const tripSummary = useMemo(() => {
     if (!trip) return "";
@@ -1329,8 +1360,8 @@ export default function TripDetails() {
         <div className="bg-white/60 backdrop-blur-xl p-1 rounded-2xl shadow-md shadow-blue-900/[0.07] border border-white/70 flex gap-0.5 mb-6 overflow-x-auto">
           {([
             { id: "program",  emoji: "📅", label: "Programme" },
-            { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
+            { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
             <button
@@ -1355,7 +1386,76 @@ export default function TripDetails() {
           transition={{ duration: 0.2 }}
         >
           {activeTab === "program" ? (
-            <div className="space-y-8">
+            <div className="space-y-6">
+              {/* ── Participant selector ─────────────────────────────────── */}
+              {(trip.members ?? []).length > 1 && (
+                <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl p-3">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Voir le programme de</p>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {/* "Tous" button */}
+                    <button
+                      onClick={() => setSelectedParticipantId(null)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 shrink-0 p-2 rounded-xl border transition-all",
+                        selectedParticipantId === null
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                      )}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-slate-300 to-slate-400 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+                        👥
+                      </div>
+                      <span className="text-[10px] font-semibold">Tous</span>
+                    </button>
+                    {/* Per-member buttons */}
+                    {(trip.members as any[]).map((member: any) => {
+                      const isMe = member.userId === userId;
+                      const memberRole: string = member.role ?? "member";
+                      const isSelected = selectedParticipantId === member.userId;
+                      return (
+                        <button
+                          key={member.userId}
+                          onClick={() => setSelectedParticipantId(isSelected ? null : member.userId)}
+                          className={cn(
+                            "flex flex-col items-center gap-1 shrink-0 p-2 rounded-xl border transition-all",
+                            isSelected
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                          )}
+                        >
+                          <div className="relative">
+                            <div className={cn(
+                              "w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm text-white",
+                              isSelected
+                                ? "bg-gradient-to-tr from-primary to-accent ring-2 ring-primary ring-offset-1"
+                                : "bg-gradient-to-tr from-slate-400 to-slate-500"
+                            )}>
+                              {member.username.charAt(0).toUpperCase()}
+                            </div>
+                            {memberRole === "admin" && (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center text-[9px]">👑</span>
+                            )}
+                          </div>
+                          <span className={cn("text-[10px] font-semibold max-w-[52px] truncate", isSelected ? "text-primary" : "")}>
+                            {isMe ? "Moi" : member.username}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedParticipantId !== null && (
+                    <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/40">
+                      {filteredEvents.length} événement{filteredEvents.length !== 1 ? "s" : ""} visible{filteredEvents.length !== 1 ? "s" : ""}
+                      <span className="text-xs text-muted-foreground/60 ml-1">(ses événements + partagés)</span>
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ── Events list ──────────────────────────────────────────── */}
               {sortedDates.length === 0 ? (
                 <div className="text-center py-16 bg-white/60 backdrop-blur-xl border border-dashed border-white/80 rounded-3xl shadow-sm">
                   <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -1363,16 +1463,22 @@ export default function TripDetails() {
                   </div>
                   <h3 className="text-lg font-bold mb-2">Programme vide</h3>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
-                    Commencez à ajouter des activités, transports ou logements à votre voyage.
+                    {selectedParticipantId !== null
+                      ? "Aucun événement pour ce participant."
+                      : "Commencez à ajouter des activités, transports ou logements à votre voyage."}
                   </p>
-                  <BookingLinksSection />
-                  <ImportReservationSection
-                    onDirectAdd={handleDirectEventAdd}
-                    tripStartDate={trip.startDate}
-                  />
+                  {selectedParticipantId === null && (
+                    <>
+                      <BookingLinksSection />
+                      <ImportReservationSection
+                        onDirectAdd={handleDirectEventAdd}
+                        tripStartDate={trip.startDate}
+                      />
+                    </>
+                  )}
                 </div>
               ) : (
-                <>
+                <div className="space-y-8">
                 {sortedDates.map((date) => (
                   <div key={date}>
                     <h3 className="sticky top-16 z-20 py-2 bg-white/70 backdrop-blur-md text-base font-bold text-slate-700 border-b border-white/60 mb-4 flex items-center gap-2">
@@ -1400,6 +1506,18 @@ export default function TripDetails() {
                                 focusedEventId === event.id ? "scale-125 ring-2 ring-offset-1 ring-primary" : "hover:scale-110"
                               )}
                             />
+                            {/* forAll / personal badge */}
+                            {(event as any).forAll ? (
+                              <div className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-600 text-[10px] font-semibold rounded-full px-2 py-0.5">
+                                <Users className="w-2.5 h-2.5" />
+                                Tous
+                              </div>
+                            ) : (event as any).participantIds?.length > 0 && (event as any).participantIds?.length < (trip.members?.length ?? 99) ? (
+                              <div className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-600 text-[10px] font-semibold rounded-full px-2 py-0.5">
+                                <UserCheck className="w-2.5 h-2.5" />
+                                Perso
+                              </div>
+                            ) : null}
                             {event.type === "transport" ? (
                               <TransportCard
                                 event={event as any}
@@ -1442,7 +1560,7 @@ export default function TripDetails() {
                   onDirectAdd={handleDirectEventAdd}
                   tripStartDate={trip.startDate}
                 />
-                </>
+                </div>
               )}
               {/* News ticker — bottom of programme tab */}
               <NewsTicker
@@ -1544,24 +1662,97 @@ export default function TripDetails() {
                 )}
               </div>
 
-              {/* Members */}
-              <div>
-                <p className="text-sm font-semibold text-muted-foreground mb-2">Participants ({trip.members.length})</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {trip.members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-3 bg-white/65 backdrop-blur-md rounded-xl border border-white/70">
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
-                        {member.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">{member.username} {member.userId === trip.creatorId && "👑"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(parseISO(member.joinedAt), "dd MMM yyyy", { locale: fr })}
-                        </p>
-                      </div>
+              {/* Members with admin management */}
+              <div className="space-y-3">
+                {/* Admins section */}
+                {(trip.members as any[]).some((m: any) => m.role === "admin") && (
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Shield className="w-3.5 h-3.5 text-amber-500" />
+                      <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                        Administrateurs ({(trip.members as any[]).filter((m: any) => m.role === "admin").length}/4)
+                      </p>
                     </div>
-                  ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(trip.members as any[]).filter((m: any) => m.role === "admin").map((member: any) => {
+                        const isMe = member.userId === userId;
+                        const isCreator = member.userId === trip.creatorId;
+                        return (
+                          <div key={member.id} className="flex items-center gap-3 p-3 bg-amber-50/60 backdrop-blur-md rounded-xl border border-amber-200/70">
+                            <div className="relative shrink-0">
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-orange-400 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                {member.username.charAt(0).toUpperCase()}
+                              </div>
+                              {isCreator && <span className="absolute -bottom-0.5 -right-0.5 text-[10px]">👑</span>}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-sm truncate">{isMe ? `${member.username} (moi)` : member.username}</p>
+                              <p className="text-xs text-amber-600 font-medium">Admin</p>
+                            </div>
+                            {isAdmin && !isMe && !isCreator && (
+                              <button
+                                onClick={() => updateMemberRole(member.userId, "member")}
+                                disabled={roleUpdating === member.userId}
+                                className="shrink-0 text-[10px] font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {roleUpdating === member.userId ? <Loader2 className="w-3 h-3 animate-spin" /> : "Rétrograder"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Regular members section */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Participants ({(trip.members as any[]).filter((m: any) => m.role !== "admin").length})
+                    </p>
+                  </div>
+                  {(trip.members as any[]).filter((m: any) => m.role !== "admin").length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic px-1">Tous les membres sont administrateurs.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(trip.members as any[]).filter((m: any) => m.role !== "admin").map((member: any) => {
+                        const isMe = member.userId === userId;
+                        const adminCount = (trip.members as any[]).filter((m: any) => m.role === "admin").length;
+                        const canPromote = isAdmin && adminCount < 4;
+                        return (
+                          <div key={member.id} className="flex items-center gap-3 p-3 bg-white/65 backdrop-blur-md rounded-xl border border-white/70">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
+                              {member.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-sm truncate">{isMe ? `${member.username} (moi)` : member.username}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(parseISO(member.joinedAt), "dd MMM yyyy", { locale: fr })}
+                              </p>
+                            </div>
+                            {canPromote && !isMe && (
+                              <button
+                                onClick={() => updateMemberRole(member.userId, "admin")}
+                                disabled={roleUpdating === member.userId}
+                                className="shrink-0 text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {roleUpdating === member.userId ? <Loader2 className="w-3 h-3 animate-spin" /> : "Promouvoir"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
+
+                {isAdmin && (
+                  <p className="text-[11px] text-muted-foreground/70 italic px-1">
+                    Maximum 4 administrateurs par voyage. Le créateur ne peut pas être rétrogradé.
+                  </p>
+                )}
               </div>
 
               {/* Group Chat */}
@@ -1666,10 +1857,16 @@ export default function TripDetails() {
                 title: e.title,
                 pricePerPerson: e.pricePerPerson ?? null,
                 priceType: e.priceType ?? null,
-                extraData: e.transportData ?? e.logementData ?? undefined,
+                extraData: e.transportData ?? e.lodgingData ?? undefined,
               })) ?? []}
               adults={groupSize}
               children={groupChildren}
+              members={(trip.members as any[])?.map((m: any) => ({
+                userId: m.userId,
+                username: m.username ?? "?",
+                role: m.role,
+              })) ?? []}
+              rawEvents={(trip.events as any[]) ?? []}
             />
 
           ) : (

@@ -73,6 +73,7 @@ export interface Member {
   userId: number;
   tripId: number;
   username: string;
+  role: "member" | "admin";
   joinedAt: string;
 }
 
@@ -82,6 +83,7 @@ export const EventType = {
   activite: "activite",
   transport: "transport",
   logement: "logement",
+  restauration: "restauration",
   reunion: "reunion",
   autre: "autre",
 } as const;
@@ -96,6 +98,14 @@ export interface Event {
   startTime?: string | null;
   endTime?: string | null;
   notes?: string | null;
+  pricePerPerson?: number | null;
+  priceType?: string | null;
+  forAll?: boolean;
+  participantIds?: number[] | null;
+  transportData?: Record<string, unknown> | null;
+  lodgingData?: Record<string, unknown> | null;
+  restaurationData?: Record<string, unknown> | null;
+  activiteData?: Record<string, unknown> | null;
   creatorId: number;
   createdAt: string;
 }
@@ -128,6 +138,14 @@ export interface CreateEventRequest {
   startTime?: string | null;
   endTime?: string | null;
   notes?: string | null;
+  pricePerPerson?: number | null;
+  priceType?: string | null;
+  transportData?: Record<string, unknown> | null;
+  lodgingData?: Record<string, unknown> | null;
+  restaurationData?: Record<string, unknown> | null;
+  activiteData?: Record<string, unknown> | null;
+  forAll?: boolean;
+  participantIds?: number[] | null;
   creatorId: number;
 }
 

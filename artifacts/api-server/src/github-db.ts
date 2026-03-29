@@ -29,6 +29,7 @@ export type TripMember = {
   id: number;
   tripId: number;
   userId: number;
+  role: "member" | "admin";
   joinedAt: string;
 };
 
@@ -48,6 +49,8 @@ export type AppEvent = {
   activiteData: Record<string, unknown> | null;
   pricePerPerson: number | null;
   priceType: string | null;
+  forAll: boolean;
+  participantIds: number[] | null;
   creatorId: number;
   createdAt: string;
 };
@@ -217,10 +220,29 @@ export async function isMember(tripId: number, userId: number): Promise<boolean>
   return all.some((m) => m.tripId === tripId && m.userId === userId);
 }
 
-export async function addMember(data: Omit<TripMember, "id" | "joinedAt">): Promise<TripMember> {
-  const member: TripMember = { id: genId(), ...data, joinedAt: new Date().toISOString() };
+export async function addMember(data: Omit<TripMember, "id" | "joinedAt"> & { role?: "member" | "admin" }): Promise<TripMember> {
+  const member: TripMember = { id: genId(), role: data.role ?? "member", ...data, joinedAt: new Date().toISOString() };
   await modifyArr<TripMember>("data/members.json", (arr) => [...arr, member]);
   return member;
+}
+
+export async function updateMemberRole(tripId: number, userId: number, role: "member" | "admin"): Promise<TripMember | null> {
+  let found: TripMember | null = null;
+  await modifyArr<TripMember>("data/members.json", (arr) =>
+    arr.map((m) => {
+      if (m.tripId === tripId && m.userId === userId) {
+        found = { ...m, role };
+        return found;
+      }
+      return m;
+    })
+  );
+  return found;
+}
+
+export async function getAdminCount(tripId: number): Promise<number> {
+  const members = await getTripMembers(tripId);
+  return members.filter((m) => m.role === "admin").length;
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────

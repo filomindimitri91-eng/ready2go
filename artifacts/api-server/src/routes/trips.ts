@@ -25,6 +25,8 @@ const CreateEventBody = z.object({
   lodgingData: z.record(z.string(), z.any()).optional().nullable(),
   restaurationData: z.record(z.string(), z.any()).optional().nullable(),
   activiteData: z.record(z.string(), z.any()).optional().nullable(),
+  forAll: z.boolean().optional().default(false),
+  participantIds: z.array(z.number()).optional().nullable(),
 });
 
 const UpdateEventBody = z.object({
@@ -36,6 +38,16 @@ const UpdateEventBody = z.object({
   notes: z.string().optional().nullable(),
   pricePerPerson: z.number().optional().nullable(),
   priceType: z.string().optional().nullable(),
+  transportData: z.record(z.string(), z.any()).optional().nullable(),
+  lodgingData: z.record(z.string(), z.any()).optional().nullable(),
+  restaurationData: z.record(z.string(), z.any()).optional().nullable(),
+  activiteData: z.record(z.string(), z.any()).optional().nullable(),
+  forAll: z.boolean().optional(),
+  participantIds: z.array(z.number()).optional().nullable(),
+});
+
+const UpdateMemberRoleBody = z.object({
+  role: z.enum(["member", "admin"]),
 });
 
 const JoinTripBody = z.object({
@@ -162,7 +174,7 @@ router.post("/trips", requireAuth, async (req, res) => {
       creatorId: userId,
     });
 
-    await gdb.addMember({ tripId: trip.id, userId });
+    await gdb.addMember({ tripId: trip.id, userId, role: "admin" });
 
     res.status(201).json(trip);
   } catch (err) {
@@ -313,6 +325,8 @@ router.post("/trips/:tripId/events", requireAuth, requireTripMember, async (req,
       lodgingData: (body.lodgingData as Record<string, unknown>) ?? null,
       restaurationData: (body.restaurationData as Record<string, unknown>) ?? null,
       activiteData: (body.activiteData as Record<string, unknown>) ?? null,
+      forAll: body.forAll ?? false,
+      participantIds: body.forAll ? null : (body.participantIds ?? [userId]),
       creatorId: userId,
     });
 
@@ -327,11 +341,28 @@ router.put("/trips/:tripId/events/:eventId", requireAuth, requireTripMember, asy
   try {
     const tripId = parseInt(parseParam(req.params.tripId));
     const eventId = parseInt(parseParam(req.params.eventId));
+    const userId = req.user!.userId;
     const body = UpdateEventBody.parse(req.body);
 
-    const event = await gdb.getEventById(eventId);
+    const [event, members] = await Promise.all([
+      gdb.getEventById(eventId),
+      gdb.getTripMembers(tripId),
+    ]);
     if (!event || event.tripId !== tripId) {
       res.status(404).json({ error: "Événement introuvable" });
+      return;
+    }
+
+    const myRole = members.find((m) => m.userId === userId)?.role ?? "member";
+    const isAdmin = myRole === "admin";
+    const isOwner = event.creatorId === userId;
+
+    if (event.forAll && !isAdmin) {
+      res.status(403).json({ error: "Seuls les administrateurs peuvent modifier un événement partagé." });
+      return;
+    }
+    if (!event.forAll && !isAdmin && !isOwner) {
+      res.status(403).json({ error: "Vous ne pouvez modifier que vos propres événements." });
       return;
     }
 
@@ -344,12 +375,60 @@ router.put("/trips/:tripId/events/:eventId", requireAuth, requireTripMember, asy
     if (body.notes !== undefined) patch.notes = body.notes;
     if (body.pricePerPerson !== undefined) patch.pricePerPerson = body.pricePerPerson;
     if (body.priceType !== undefined) patch.priceType = body.priceType;
+    if (body.transportData !== undefined) patch.transportData = body.transportData as Record<string, unknown>;
+    if (body.lodgingData !== undefined) patch.lodgingData = body.lodgingData as Record<string, unknown>;
+    if (body.restaurationData !== undefined) patch.restaurationData = body.restaurationData as Record<string, unknown>;
+    if (body.activiteData !== undefined) patch.activiteData = body.activiteData as Record<string, unknown>;
+    if (body.forAll !== undefined && isAdmin) patch.forAll = body.forAll;
+    if (body.participantIds !== undefined && isAdmin) patch.participantIds = body.participantIds;
 
     const updated = await gdb.updateEvent(eventId, patch);
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "Error updating event");
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// ─── Admin: change member role ──────────────────────────────────────────────
+
+router.patch("/trips/:tripId/members/:userId/role", requireAuth, requireTripMember, async (req, res) => {
+  try {
+    const tripId = parseInt(parseParam(req.params.tripId));
+    const targetUserId = parseInt(parseParam(req.params.userId));
+    const requesterId = req.user!.userId;
+    const body = UpdateMemberRoleBody.parse(req.body);
+
+    const members = await gdb.getTripMembers(tripId);
+    const requesterMember = members.find((m) => m.userId === requesterId);
+    const targetMember = members.find((m) => m.userId === targetUserId);
+
+    if (!requesterMember || requesterMember.role !== "admin") {
+      res.status(403).json({ error: "Seuls les administrateurs peuvent gérer les rôles." });
+      return;
+    }
+    if (!targetMember) {
+      res.status(404).json({ error: "Membre introuvable." });
+      return;
+    }
+
+    const trip = await gdb.getTripById(tripId);
+    if (targetUserId === trip?.creatorId && body.role === "member") {
+      res.status(403).json({ error: "Le créateur du voyage ne peut pas être rétrogradé." });
+      return;
+    }
+
+    const adminCount = members.filter((m) => m.role === "admin").length;
+    if (body.role === "admin" && adminCount >= 4) {
+      res.status(400).json({ error: "Maximum 4 administrateurs par voyage." });
+      return;
+    }
+
+    const updated = await gdb.updateMemberRole(tripId, targetUserId, body.role);
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Error updating member role");
+    res.status(400).json({ error: "Requête invalide" });
   }
 });
 

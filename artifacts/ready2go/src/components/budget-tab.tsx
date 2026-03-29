@@ -3,8 +3,9 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { ChevronDown, ChevronUp, Coins, RefreshCw, BarChart2, PieChartIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Coins, RefreshCw, BarChart2, PieChartIcon, Users, UserCheck } from "lucide-react";
 import { CURRENCIES, fmtCurrency, CurrencyTab } from "@/components/currency-tab";
+import { cn } from "@/lib/utils";
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,26 @@ interface EventCostRow {
   nights: number;
 }
 
+interface RawEvent {
+  id?: string | number;
+  type: string;
+  title: string;
+  pricePerPerson?: number | null;
+  priceType?: string | null;
+  forAll?: boolean;
+  participantIds?: number[] | null;
+  creatorId?: number;
+  transportData?: Record<string, unknown> | null;
+  lodgingData?: Record<string, unknown> | null;
+  activiteData?: Record<string, unknown> | null;
+}
+
+interface TripMemberBasic {
+  userId: number;
+  username: string;
+  role?: string;
+}
+
 interface Props {
   tripId: number;
   destination: string;
@@ -39,6 +60,8 @@ interface Props {
   events: EventItem[];
   adults: number;
   children: number;
+  members?: TripMemberBasic[];
+  rawEvents?: RawEvent[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -230,16 +253,44 @@ function EventRow({
 
 // ── BudgetTab ─────────────────────────────────────────────────────────────────
 
-export function BudgetTab({ tripId, events, adults, children }: Props) {
+export function BudgetTab({ tripId, events, adults, children, members = [], rawEvents = [] }: Props) {
   const travelers = adults + children;
   const [selectedCurrency, setSelectedCurrency] = useState("EUR");
   const [showConverter, setShowConverter] = useState(false);
   const [chartType, setChartType] = useState<"pie" | "bar">("pie");
+  const [budgetView, setBudgetView] = useState<"group" | "participant">("group");
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+
+  // Derive the per-participant event list (forAll events + participant's events)
+  const participantEvents = useMemo(() => {
+    if (!selectedMemberId) return events;
+    const totalParticipants = members.length || travelers;
+    return rawEvents
+      .filter((e) => {
+        if (e.forAll) return true;
+        if (!e.participantIds || e.participantIds.length === 0) return e.creatorId === selectedMemberId;
+        return e.participantIds.includes(selectedMemberId);
+      })
+      .map((e): EventItem => ({
+        type: e.type,
+        title: e.title,
+        pricePerPerson: e.forAll
+          ? (e.pricePerPerson ?? null) // forAll → already per-person price
+          : (e.pricePerPerson ?? null),
+        priceType: e.priceType ?? null,
+        extraData: (e.transportData ?? e.lodgingData ?? e.activiteData ?? undefined) as Record<string, unknown> | undefined,
+      }));
+  }, [selectedMemberId, rawEvents, members.length, travelers, events]);
+
+  // Active events depend on whether participant mode is on
+  const activeEvents = budgetView === "participant" && selectedMemberId !== null
+    ? participantEvents
+    : events;
 
   const STORAGE_KEY = `budget_rows_v2_${tripId}`;
 
   // Build fresh rows from current events
-  const freshRows = useMemo(() => events.map((e, i) => makeRowFromEvent(e, i)), [events]);
+  const freshRows = useMemo(() => activeEvents.map((e, i) => makeRowFromEvent(e, i)), [activeEvents]);
 
   // Initialize from localStorage, merging with fresh event data
   const [eventRows, setEventRows] = useState<EventCostRow[]>(() => {
@@ -253,10 +304,10 @@ export function BudgetTab({ tripId, events, adults, children }: Props) {
     return freshRows;
   });
 
-  // Sync when events prop changes (new events added, prices updated in forms)
+  // Sync when active events change
   const prevEventsRef = useRef<string>("");
   useEffect(() => {
-    const sig = JSON.stringify(events.map(e => ({
+    const sig = JSON.stringify(activeEvents.map(e => ({
       title: e.title, type: e.type,
       price: e.pricePerPerson, priceType: e.priceType,
       extra: e.extraData,
@@ -265,7 +316,7 @@ export function BudgetTab({ tripId, events, adults, children }: Props) {
       prevEventsRef.current = sig;
       setEventRows(prev => mergeWithStored(freshRows, prev));
     }
-  }, [events, freshRows]);
+  }, [activeEvents, freshRows]);
 
   // Persist price overrides to localStorage
   useEffect(() => {
@@ -322,6 +373,69 @@ export function BudgetTab({ tripId, events, adults, children }: Props) {
 
   return (
     <div className="space-y-5">
+
+      {/* ── Vue budget (groupe / par participant) ── */}
+      {members.length > 1 && (
+        <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl p-3 space-y-3">
+          <div className="flex items-center gap-2 bg-muted/50 rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => { setBudgetView("group"); setSelectedMemberId(null); }}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                budgetView === "group" ? "bg-white shadow text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Groupe
+            </button>
+            <button
+              type="button"
+              onClick={() => setBudgetView("participant")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                budgetView === "participant" ? "bg-white shadow text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              Par participant
+            </button>
+          </div>
+
+          {budgetView === "participant" && (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {members.map((member) => (
+                <button
+                  key={member.userId}
+                  type="button"
+                  onClick={() => setSelectedMemberId(member.userId === selectedMemberId ? null : member.userId)}
+                  className={cn(
+                    "flex flex-col items-center gap-1 shrink-0 p-2 rounded-xl border transition-all",
+                    selectedMemberId === member.userId
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                  )}
+                >
+                  <div className={cn(
+                    "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white",
+                    selectedMemberId === member.userId
+                      ? "bg-gradient-to-tr from-primary to-accent"
+                      : "bg-gradient-to-tr from-slate-400 to-slate-500"
+                  )}>
+                    {member.username.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-[10px] font-semibold max-w-[52px] truncate">{member.username}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {budgetView === "participant" && selectedMemberId === null && (
+            <p className="text-[11px] text-muted-foreground text-center py-1">
+              Sélectionnez un participant pour voir son budget
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Devise + actions ── */}
       <div className="bg-card border border-border/50 rounded-2xl px-4 py-3 flex items-center gap-3">
