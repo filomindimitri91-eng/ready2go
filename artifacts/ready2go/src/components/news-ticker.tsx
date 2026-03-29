@@ -51,13 +51,17 @@ export function NewsTicker({ destination, events }: Props) {
   const [loading, setLoading] = useState(true);
   const token = typeof window !== "undefined" ? localStorage.getItem("r2g_token") : null;
 
+  const operatorsKey = (events ?? [])
+    .filter(e => e.type === "transport" && e.transportData?.provider)
+    .map(e => e.transportData!.provider as string)
+    .filter(Boolean)
+    .sort()
+    .join(",");
+
   useEffect(() => {
     if (!destination) return;
 
-    const transports = (events ?? [])
-      .filter(e => e.type === "transport" && e.transportData?.provider)
-      .map(e => e.transportData!.provider as string)
-      .filter(Boolean);
+    const operators = operatorsKey ? operatorsKey.split(",") : [];
 
     const ctrl = new AbortController();
     fetch("/api/ai/travel-news", {
@@ -66,7 +70,7 @@ export function NewsTicker({ destination, events }: Props) {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ destination, operators: [...new Set(transports)] }),
+      body: JSON.stringify({ destination, operators: [...new Set(operators)] }),
       signal: ctrl.signal,
     })
       .then(r => r.ok ? r.json() : Promise.reject())
@@ -81,7 +85,7 @@ export function NewsTicker({ destination, events }: Props) {
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [destination]);
+  }, [destination, operatorsKey]);
 
   if (loading) {
     return (
