@@ -5,20 +5,39 @@ const router = Router();
 
 router.use(requireAuth);
 
+// Active AI model — updated each time getOpenAI() resolves
+let AI_MODEL = "gemini-2.0-flash";
+
 async function getOpenAI() {
   const { default: OpenAI } = await import("openai");
-  // 1. Direct key — works on any deployment (Vercel, Render, Railway…)
-  const directKey = process.env.OPENAI_API_KEY;
-  if (directKey) {
-    return new OpenAI({ apiKey: directKey });
+
+  // 1. Google Gemini — free (1 500 req/day), no subscription needed
+  //    Get a free key at https://aistudio.google.com/
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    AI_MODEL = "gemini-2.0-flash";
+    return new OpenAI({
+      apiKey: geminiKey,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    });
   }
-  // 2. Replit AI proxy — dev-only fallback (not available outside Replit)
-  const openaiUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const openaiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (openaiUrl && openaiKey) {
-    return new OpenAI({ apiKey: openaiKey, baseURL: openaiUrl });
+
+  // 2. OpenAI direct key (paid, optional)
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    AI_MODEL = "gpt-4o-mini";
+    return new OpenAI({ apiKey: openaiKey });
   }
-  throw new Error("AI not configured");
+
+  // 3. Replit AI proxy — dev environment only
+  const replitUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const replitKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (replitUrl && replitKey) {
+    AI_MODEL = "gpt-4o-mini";
+    return new OpenAI({ apiKey: replitKey, baseURL: replitUrl });
+  }
+
+  throw new Error("AI non configuré. Ajoutez GEMINI_API_KEY dans les variables d'environnement.");
 }
 
 async function getAudio() {
@@ -55,8 +74,8 @@ router.post("/ai/translate", async (req, res) => {
     }
 
     const translationRes = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 1024,
+      model: AI_MODEL,
+      max_tokens: 1024,
       messages: [
         { role: "system", content: `Tu es un traducteur expert. Traduis le texte de l'utilisateur en ${targetLangName}. Destination du voyage: ${destination || "inconnue"}. Réponds UNIQUEMENT avec la traduction, sans explication ni ponctuation supplémentaire.` },
         { role: "user", content: transcription },
@@ -93,8 +112,8 @@ router.post("/ai/chat", async (req, res) => {
       ?? `Tu es un assistant de voyage expert et enthousiaste. Le voyage est à destination de : "${destination}". Tu aides les voyageurs à trouver des idées d'activités, de transport, de logement et de restaurants adaptés à leur destination. Réponds toujours en français, de manière concise et pratique. Utilise des emojis pour rendre tes réponses vivantes.`;
 
     const stream = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 1024,
+      model: AI_MODEL,
+      max_tokens: 1024,
       messages: [{ role: "system", content: system }, ...messages],
       stream: true,
     });
@@ -179,8 +198,8 @@ FORMAT JSON (tableau plat d'événements) :
 RÈGLE PRIX : Pour les événements de type "restauration", TOUJOURS remplir avgMenuPrice (nombre entier en EUR), priceRange, priceLevel et priceSource. Ces champs sont OBLIGATOIRES pour les restaurants. Pour les autres types, omettre ces champs.`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 3000,
+      model: AI_MODEL,
+      max_tokens: 3000,
       messages: [
         { role: "system", content: "Tu es un assistant de planification de voyages expert. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
         { role: "user", content: prompt },
@@ -237,8 +256,8 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 800,
+      model: AI_MODEL,
+      max_tokens: 800,
       messages: [
         { role: "system", content: "Tu es un assistant de budget voyage. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
         { role: "user", content: prompt },
@@ -294,8 +313,8 @@ Réponds UNIQUEMENT en JSON valide sans markdown :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 600,
+      model: AI_MODEL,
+      max_tokens: 600,
       messages: [
         { role: "system", content: "Tu es un expert en gastronomie mondiale. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
         { role: "user", content: prompt },
@@ -331,8 +350,8 @@ router.post("/ai/transit", async (req, res) => {
     const prompt = `Propose un itineraire typique en transports en commun de "${from}" a "${to}" a ${city}. Inclus les etapes a pied. Reponds UNIQUEMENT en JSON : {"summary":"...","totalDuration":"...","steps":[{"mode":"metro|bus|tram|rer|train|marche|ferry|autre","emoji":"...","line":"...","from":"...","to":"...","duration":"...","instruction":"..."}],"tips":"..."}`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 5000,
+      model: AI_MODEL,
+      max_tokens: 5000,
       messages: [
         { role: "system", content: "Assistant voyage. JSON uniquement, pas de markdown." },
         { role: "user", content: prompt },
@@ -408,8 +427,8 @@ FORMAT JSON :
 }`;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 3000,
+      model: AI_MODEL,
+      max_tokens: 3000,
       messages: [
         { role: "system", content: "Tu es un expert en événements culturels et touristiques. Tu réponds UNIQUEMENT en JSON valide, sans markdown." },
         { role: "user", content: prompt },
@@ -537,8 +556,8 @@ router.post("/ai/import-reservation", async (req, res) => {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 2000,
+      model: AI_MODEL,
+      max_tokens: 2000,
       messages,
     });
 
@@ -642,8 +661,8 @@ router.post("/ai/parse-trip", async (req, res) => {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 1500,
+      model: AI_MODEL,
+      max_tokens: 1500,
       messages,
     });
 
@@ -748,8 +767,8 @@ router.post("/ai/travel-news", async (req, res) => {
       if (openai) {
         const opList = operators.length ? `Opérateurs concernés : ${operators.join(", ")}.` : "";
         const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          max_completion_tokens: 600,
+          model: AI_MODEL,
+          max_tokens: 600,
           messages: [
             { role: "system", content: "Tu es un agrégateur d'actualités voyage. Génère des titres d'actualité plausibles et concis (max 90 chars chacun). Réponds UNIQUEMENT en JSON." },
             { role: "user", content: `Génère 6 titres d'actualité pouvant impacter des voyageurs à destination de ${destination}. ${opList} Inclus : grèves/perturbations transports, météo, événements locaux, alertes sécurité si pertinentes. Format : {"items":[{"title":"...","category":"alert|transport|weather|event|info"}]}` },
@@ -789,8 +808,8 @@ router.post("/ai/travel-tips", async (req, res) => {
     const openai = await getOpenAI().catch(() => null);
     if (!openai) { res.json({ tips: [] }); return; }
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_completion_tokens: 500,
+      model: AI_MODEL,
+      max_tokens: 500,
       messages: [
         { role: "system", content: "Tu es un expert conseiller voyage. Génère des conseils pratiques, courts, concrets et utiles pour voyageurs. Réponds UNIQUEMENT en JSON valide." },
         { role: "user", content: `Génère 4 conseils pour un voyageur se rendant à ${destination}. Axe sur : pièges fréquents (transports, arnaques, météo), astuces locales, problèmes courants rapportés par les voyageurs. Chaque conseil : max 95 caractères, en français, commence par un emoji. Format : {"tips":["...","...","...","..."]}` },
