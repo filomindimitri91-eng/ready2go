@@ -296,14 +296,23 @@ export function ImportReservationSection({
       }
 
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("r2g_token") : null;
-      const res = await fetch("/api/ai/import-reservation", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/ai/import-reservation", {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -313,8 +322,12 @@ export function ImportReservationSection({
 
       const data: ImportResult = await res.json();
       setResult(data);
-    } catch {
-      setError("Erreur de connexion au serveur.");
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        setError("L'analyse a pris trop de temps. Réessayez avec un fichier plus petit.");
+      } else {
+        setError("Impossible de contacter le serveur. Vérifiez votre connexion.");
+      }
     } finally {
       setLoading(false);
     }

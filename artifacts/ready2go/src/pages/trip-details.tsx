@@ -37,7 +37,6 @@ import { TripHelp } from "@/components/help/trip-help";
 import { WeatherWidget } from "@/components/weather-widget";
 import { NavButtons } from "@/components/nav-buttons";
 import { BudgetTab } from "@/components/budget-tab";
-import { DeplacerTab } from "@/components/deplacer-tab";
 import { PriceSection, PRICE_TYPE_LABEL } from "@/components/price-section";
 import { BookingLinksSection, ImportReservationSection } from "@/components/booking-section";
 import { NewsTicker } from "@/components/news-ticker";
@@ -926,7 +925,7 @@ export default function TripDetails() {
   const { userId, username } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "deplacer" | "help">("program");
+  const [activeTab, setActiveTab] = useState<"program" | "group" | "budget" | "help">("program");
   const [groupSize, setGroupSize] = useState(2);
   const [groupChildren, setGroupChildren] = useState(0);
   const [isAddEventOpen, setIsAddEventOpen] = useState(false);
@@ -1324,7 +1323,6 @@ export default function TripDetails() {
             { id: "program",  emoji: "📅", label: "Programme" },
             { id: "group",    emoji: "👥", label: "Groupe" },
             { id: "budget",   emoji: "💰", label: "Budget" },
-            { id: "deplacer", emoji: "🚌", label: "Se déplacer" },
             { id: "help",     emoji: "🤖", label: "Assistant" },
           ] as const).map(tab => (
             <button
@@ -1623,9 +1621,6 @@ export default function TripDetails() {
               adults={groupSize}
               children={groupChildren}
             />
-
-          ) : activeTab === "deplacer" ? (
-            <DeplacerTab destination={trip.destination} />
 
           ) : (
             <TripHelp destination={trip.destination} apiBase="" />
