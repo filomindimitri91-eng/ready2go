@@ -16,7 +16,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build (local)**: esbuild → `.mjs` ESM bundle (via `artifacts/api-server/build.mjs`); `openai` marked as external
-- **Build (Vercel)**: `@vercel/node` per-file TypeScript transpilation → CJS. CRITICAL: `artifacts/api-server/package.json` must NOT have `"type": "module"` (CJS/ESM boundary fix). `api/index.ts` uses a static `import app from "../artifacts/api-server/src/app"`.
+- **Build (Vercel)**: `@vercel/node` per-file TypeScript transpilation → CJS. CRITICAL: `api/package.json` MUST have `"type": "commonjs"` — having `"type": "module"` causes Node.js to load the CJS output as ESM → FUNCTION_INVOCATION_FAILED. `api/index.ts` uses a lazy dynamic import with error handling. Pino uses `process.stdout` in production to avoid worker thread issues in Lambda.
 - **Vercel production URL**: `https://ready2go-api-server.vercel.app`
 
 ## Structure
