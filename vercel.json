@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/ready2go run build && cp -r artifacts/ready2go/dist ./dist",
+  "buildCommand": "pnpm --filter @workspace/ready2go run build -- --outDir ../../dist",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
