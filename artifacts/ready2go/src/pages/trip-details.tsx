@@ -1999,6 +1999,36 @@ const BOOKING_PARTNERS = [
     eventType: "activite" as EventType,
     subtype: "randonnee",
   },
+  {
+    key: "clickandboat",
+    label: "Click&Boat",
+    subtitle: "Location de bateaux",
+    emoji: "⛵",
+    bgClass: "bg-teal-50 border-teal-200",
+    url: "https://www.clickandboat.com/",
+    eventType: "activite" as EventType,
+    subtype: "parc",
+  },
+  {
+    key: "padi",
+    label: "PADI Travel",
+    subtitle: "Plongée",
+    emoji: "🤿",
+    bgClass: "bg-indigo-50 border-indigo-200",
+    url: "https://travel.padi.com/",
+    eventType: "activite" as EventType,
+    subtype: "randonnee",
+  },
+  {
+    key: "alltrails",
+    label: "AllTrails",
+    subtitle: "Randonnées & sentiers",
+    emoji: "🥾",
+    bgClass: "bg-green-50 border-green-200",
+    url: "https://www.alltrails.com/",
+    eventType: "activite" as EventType,
+    subtype: "randonnee",
+  },
 ];
 
 function BookingLinksSection({ onAddFromBooking }: {
