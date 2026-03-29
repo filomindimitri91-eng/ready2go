@@ -1267,7 +1267,7 @@ export default function TripDetails() {
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
                     Commencez à ajouter des activités, transports ou logements à votre voyage.
                   </p>
-                  <BookingLinksSection onAddFromBooking={openFromBooking} />
+                  <BookingLinksSection />
                   <ImportReservationSection
                     onDirectAdd={handleDirectEventAdd}
                     tripStartDate={trip.startDate}
@@ -1339,7 +1339,7 @@ export default function TripDetails() {
                     </div>
                   </div>
                 ))}
-                <BookingLinksSection onAddFromBooking={openFromBooking} />
+                <BookingLinksSection />
                 <ImportReservationSection
                   onDirectAdd={handleDirectEventAdd}
                   tripStartDate={trip.startDate}

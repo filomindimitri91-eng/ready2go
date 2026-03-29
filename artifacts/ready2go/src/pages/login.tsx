@@ -151,6 +151,7 @@ export default function Login() {
               </Label>
               <Input
                 id="username"
+                name="username"
                 type="text"
                 placeholder="Ex: VoyageurIntrépide"
                 value={username}
@@ -172,6 +173,7 @@ export default function Login() {
               <div className="relative mt-1.5">
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   placeholder={mode === "register" ? "Choisissez un mot de passe" : "Votre mot de passe"}
                   value={password}

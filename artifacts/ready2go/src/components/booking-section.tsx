@@ -40,6 +40,7 @@ const BOOKING_CATEGORIES: Category[] = [
     emoji: "🚄",
     partners: [
       { key: "sncf", label: "SNCF Connect", subtitle: "Trains France & Europe", emoji: "🚄", url: "https://www.sncf-connect.com/", eventType: "transport", subtype: "train" },
+      { key: "trainline", label: "Trainline", subtitle: "Trains & bus Europe", emoji: "🎟️", url: "https://www.trainline.fr/", eventType: "transport", subtype: "train" },
       { key: "eurostar", label: "Eurostar", subtitle: "Train sous la Manche", emoji: "🇬🇧", url: "https://www.eurostar.com/fr-fr", eventType: "transport", subtype: "train" },
       { key: "flixbus", label: "FlixBus", subtitle: "Bus longue distance", emoji: "🚌", url: "https://www.flixbus.fr/", eventType: "transport", subtype: "bus" },
       { key: "blablabus", label: "BlaBlaBus", subtitle: "Bus pas chers", emoji: "🚎", url: "https://www.blablacar.fr/bus", eventType: "transport", subtype: "bus" },
@@ -95,11 +96,7 @@ const BOOKING_CATEGORIES: Category[] = [
 
 // ─── BookingLinksSection ───────────────────────────────────────────────────────
 
-export function BookingLinksSection({
-  onAddFromBooking,
-}: {
-  onAddFromBooking: (type: EventType, subtype?: string) => void;
-}) {
+export function BookingLinksSection() {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
 
   const toggleCategory = (key: string) => {
@@ -167,26 +164,15 @@ export function BookingLinksSection({
                           <p className="text-xs text-muted-foreground leading-tight">{partner.subtitle}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <a
-                          href={partner.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-[11px] font-semibold bg-white border border-border rounded-lg px-2.5 py-1.5 text-foreground hover:bg-muted/50 transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Réserver
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => onAddFromBooking(partner.eventType, partner.subtype)}
-                          className="flex items-center gap-1 text-[11px] font-semibold bg-primary text-primary-foreground rounded-lg px-2.5 py-1.5 hover:opacity-90 transition-opacity"
-                          title="Ajouter au programme"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Ajouter
-                        </button>
-                      </div>
+                      <a
+                        href={partner.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 flex items-center gap-1 text-[11px] font-semibold bg-white border border-border rounded-lg px-2.5 py-1.5 text-foreground hover:bg-muted/50 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Réserver
+                      </a>
                     </div>
                   ))}
                 </div>
