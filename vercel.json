@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "pnpm install",
-  "buildCommand": "BUILD_OUTDIR=../../dist pnpm --filter @workspace/ready2go run build",
+  "buildCommand": "bash scripts/vercel-build.sh",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
