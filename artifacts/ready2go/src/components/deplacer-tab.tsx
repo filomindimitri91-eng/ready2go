@@ -273,20 +273,31 @@ export function DeplacerTab({ destination }: Props) {
     setError(null);
     setResult(null);
     try {
+      const token = localStorage.getItem("r2g_token");
       const res = await fetch("/api/ai/transit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ from: from.trim(), to: to.trim(), city: destination }),
       });
-      if (!res.ok) throw new Error("Erreur serveur");
-      const data: TransitResult = await res.json();
-      if (!data.steps || data.steps.length === 0) {
-        // Données partielles mais pas d'erreur — on les affiche quand même
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error((errBody as any)?.error ?? `HTTP ${res.status}`);
       }
+      const data: TransitResult = await res.json();
       setResult(data);
       setHistory((prev) => [{ from: from.trim(), to: to.trim(), result: data }, ...prev.slice(0, 4)]);
-    } catch {
-      setError("Impossible d'obtenir l'itinéraire. Vérifiez votre connexion et réessayez.");
+    } catch (err: any) {
+      const msg = err?.message ?? "";
+      if (msg.includes("Service IA non configuré")) {
+        setError("Service IA non disponible sur ce déploiement. Configurez OPENAI_API_KEY pour activer les itinéraires.");
+      } else if (msg.includes("401") || msg.includes("Unauthorized")) {
+        setError("Session expirée — rechargez la page et reconnectez-vous.");
+      } else {
+        setError("Impossible d'obtenir l'itinéraire. Vérifiez votre connexion et réessayez.");
+      }
     } finally {
       setLoading(false);
     }
