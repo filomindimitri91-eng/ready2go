@@ -1,30 +1,35 @@
-let appPromise: Promise<any>;
+let _app: any = null;
+let _appError: string | null = null;
+let _appLoaded = false;
 
-async function loadApp() {
+async function ensureApp() {
+  if (_appLoaded) return _app;
   try {
     const mod = await import("../artifacts/api-server/src/app");
-    return mod.default;
+    _app = mod.default;
   } catch (err: any) {
-    console.error("[api/index] Failed to load app:", err?.message, err?.stack);
-    return null;
+    _appError = String(err?.stack || err?.message || err);
+    console.error("[Ready2Go] App load failed:", _appError);
   }
+  _appLoaded = true;
+  return _app;
 }
 
-appPromise = loadApp();
+// Start loading eagerly
+const _loadPromise = ensureApp();
 
 export default async function handler(req: any, res: any) {
-  try {
-    const app = await appPromise;
-    if (!app) {
-      res.status(503).json({
-        error: "App failed to initialize",
-        detail: "Check Vercel function logs for the startup error",
-      });
-      return;
-    }
-    app(req, res);
-  } catch (err: any) {
-    console.error("[api/index] Handler error:", err?.message);
-    res.status(500).json({ error: "Internal server error", detail: err?.message });
+  await _loadPromise;
+
+  if (!_app) {
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      error: "App initialization failed",
+      detail: _appError,
+      node: process.version,
+    }));
+    return;
   }
+
+  _app(req, res);
 }
