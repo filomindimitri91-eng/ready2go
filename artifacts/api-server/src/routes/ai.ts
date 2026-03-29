@@ -569,6 +569,109 @@ router.post("/ai/import-reservation", async (req, res) => {
   }
 });
 
+// POST /api/ai/parse-trip
+// Analyse un document pour pré-remplir les infos du voyage + créer l'événement initial
+router.post("/ai/parse-trip", async (req, res) => {
+  try {
+    const openai = await getOpenAI().catch(() => null);
+    if (!openai) { aiUnavailable(res); return; }
+
+    const { mode, imageBase64, mimeType, emailText } = req.body as {
+      mode: "file" | "email";
+      imageBase64?: string;
+      mimeType?: string;
+      emailText?: string;
+    };
+
+    const jsonSchema = `{
+  "trip": {
+    "name": "Nom court du voyage (ex: Séjour à Paris, Week-end à Rome)",
+    "destination": "Ville principale, Pays (ex: Paris, France)",
+    "startDate": "YYYY-MM-DD (premier jour du séjour)",
+    "endDate": "YYYY-MM-DD (dernier jour du séjour)"
+  },
+  "event": {
+    "eventType": "transport" | "logement" | "restauration" | "activite" | "autre",
+    "title": "Nom court de l'événement",
+    "date": "YYYY-MM-DD",
+    "startTime": "HH:MM ou null",
+    "endTime": "HH:MM ou null",
+    "location": "adresse ou lieu ou null",
+    "notes": "informations complémentaires ou null",
+    "pricePerPerson": nombre ou null,
+    "bookingReference": "référence de réservation ou null",
+    "providerName": "nom du prestataire ou null",
+    "transportData": { "transportType": "plane|train|bus|ferry|carRental|taxi|metro|other", "provider": "...", "vehicleNumber": "...", "departureLocation": "...", "arrivalLocation": "...", "departureTime": "HH:MM", "arrivalTime": "HH:MM", "arrivalDate": "YYYY-MM-DD ou null", "seat": "...", "bookingReference": "..." } ou null,
+    "lodgingData": { "lodgingType": "hotel|airbnb|rental|camping|hostel|guesthouse|other", "name": "...", "address": "...", "city": "...", "country": "...", "checkInDate": "YYYY-MM-DD", "checkInTime": "HH:MM", "checkOutDate": "YYYY-MM-DD", "checkOutTime": "HH:MM", "bookingProvider": "...", "bookingReference": "...", "roomType": "..." } ou null,
+    "restaurationData": null,
+    "activiteData": null
+  },
+  "confidence": 0.0 à 1.0
+}`;
+
+    const sysPrompt = "Tu es un assistant d'analyse de documents de voyage. Extrais les informations clés pour créer un voyage et son premier événement. Réponds UNIQUEMENT en JSON valide sans markdown.";
+
+    let messages: any[];
+    const isPdf = mode === "file" && mimeType === "application/pdf";
+
+    if (isPdf && imageBase64) {
+      const { default: pdfParse } = await import("pdf-parse");
+      const pdfBuffer = Buffer.from(imageBase64, "base64");
+      let pdfText = "";
+      try { const parsed = await pdfParse(pdfBuffer); pdfText = parsed.text?.trim() ?? ""; } catch { pdfText = ""; }
+      messages = [
+        { role: "system", content: sysPrompt },
+        { role: "user", content: `Analyse ce document de voyage et remplis le JSON :\n\n${pdfText || "PDF illisible"}\n\nRéponds UNIQUEMENT en JSON :\n${jsonSchema}` },
+      ];
+    } else if (mode === "file" && imageBase64 && mimeType) {
+      messages = [
+        { role: "system", content: sysPrompt },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}`, detail: "auto" } },
+            { type: "text", text: `Analyse ce document de voyage et remplis le JSON :\n${jsonSchema}` },
+          ],
+        },
+      ];
+    } else {
+      messages = [
+        { role: "system", content: sysPrompt },
+        { role: "user", content: `Analyse cet e-mail de réservation et remplis le JSON :\n\n${emailText ?? ""}\n\nRéponds UNIQUEMENT en JSON :\n${jsonSchema}` },
+      ];
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_completion_tokens: 1500,
+      messages,
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim() ?? "{}";
+    let result: any = {};
+    try {
+      const cleaned = raw.replace(/^```json\s*/i, "").replace(/```\s*$/i, "").trim();
+      result = JSON.parse(cleaned);
+    } catch {
+      result = { trip: {}, event: {}, confidence: 0 };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (!result.trip) result.trip = {};
+    if (!result.event) result.event = {};
+    if (!result.trip.startDate) result.trip.startDate = today;
+    if (!result.trip.endDate) result.trip.endDate = result.trip.startDate;
+    if (!result.event.date) result.event.date = result.trip.startDate;
+    if (!result.event.eventType) result.event.eventType = "autre";
+    if (!result.event.title) result.event.title = "Réservation importée";
+
+    res.json(result);
+  } catch (err: any) {
+    console.error("[ai/parse-trip]", err);
+    res.status(500).json({ error: err?.message ?? "Erreur serveur" });
+  }
+});
+
 // ─── In-memory cache for travel news (30 min TTL) ────────────────────────────
 const newsCache = new Map<string, { ts: number; items: any[] }>();
 const NEWS_TTL = 30 * 60 * 1000;

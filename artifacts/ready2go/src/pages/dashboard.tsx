@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Plus, Users, CalendarDays, MapPin, LogOut, Loader2, Compass, Plane, QrCode } from "lucide-react";
+import { Plus, Users, CalendarDays, MapPin, LogOut, Loader2, Compass, Plane, QrCode, Upload, FileText, ChevronDown, ChevronUp, CheckCircle2, Sparkles, AlertCircle, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth-context";
@@ -139,9 +139,25 @@ export default function Dashboard() {
     { query: { enabled: !!userId } }
   );
 
+  const pendingEventRef = useRef<any>(null);
+
   const createTripMutation = useCreateTrip({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async (trip: any) => {
+        if (pendingEventRef.current && trip?.id) {
+          try {
+            const token = localStorage.getItem("r2g_token");
+            await fetch(`/api/trips/${trip.id}/events`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({ ...pendingEventRef.current, tripId: trip.id, createdBy: userId }),
+            });
+          } catch {}
+          pendingEventRef.current = null;
+        }
         queryClient.invalidateQueries({ queryKey: getGetTripsQueryKey({ userId: userId! }) });
         setIsCreateModalOpen(false);
       }
@@ -301,7 +317,10 @@ export default function Dashboard() {
       <CreateTripModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onCreate={(data) => createTripMutation.mutate({ data: { ...data, creatorId: userId! } })}
+        onCreate={(data, event) => {
+          pendingEventRef.current = event ?? null;
+          createTripMutation.mutate({ data: { ...data, creatorId: userId! } });
+        }}
         isPending={createTripMutation.isPending}
       />
       <JoinTripModal
@@ -317,42 +336,254 @@ export default function Dashboard() {
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+  });
+}
+
 function CreateTripModal({ isOpen, onClose, onCreate, isPending }: any) {
   const [formData, setFormData] = useState({ name: "", destination: "", description: "", startDate: "", endDate: "" });
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); onCreate(formData); };
+  const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<"file" | "email">("file");
+  const [file, setFile] = useState<File | null>(null);
+  const [emailText, setEmailText] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzed, setAnalyzed] = useState<any>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetImport = () => {
+    setFile(null);
+    setEmailText("");
+    setAnalyzed(null);
+    setAnalyzeError(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    setAnalyzed(null);
+    try {
+      let body: any;
+      if (importMode === "file") {
+        if (!file) { setAnalyzeError("Sélectionnez un fichier."); setAnalyzing(false); return; }
+        const dataUrl = await fileToBase64(file);
+        const base64 = dataUrl.split(",")[1];
+        body = { mode: "file", imageBase64: base64, mimeType: file.type };
+      } else {
+        if (!emailText.trim()) { setAnalyzeError("Collez le contenu de l'e-mail."); setAnalyzing(false); return; }
+        body = { mode: "email", emailText: emailText.trim() };
+      }
+
+      const token = localStorage.getItem("r2g_token");
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 90_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/ai/parse-trip", {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify(body),
+        });
+      } finally { clearTimeout(tid); }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAnalyzeError(err.error || "Erreur lors de l'analyse.");
+        return;
+      }
+      const data = await res.json();
+      setAnalyzed(data);
+      setFormData(prev => ({
+        name: data.trip?.name || prev.name,
+        destination: data.trip?.destination || prev.destination,
+        startDate: data.trip?.startDate || prev.startDate,
+        endDate: data.trip?.endDate || prev.endDate,
+        description: prev.description,
+      }));
+    } catch (err: any) {
+      setAnalyzeError(err?.name === "AbortError" ? "Analyse trop longue, réessayez." : "Impossible de contacter le serveur.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onCreate(formData, analyzed?.event ?? null);
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Nouveau Voyage">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label>Nom du voyage</Label>
-          <Input required placeholder="Roadtrip d'été" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+      <div className="space-y-4">
+
+        {/* ── Import collapsible section ── */}
+        <div className="rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50/70 to-blue-50/70 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { setImportOpen(v => !v); if (importOpen) resetImport(); }}
+            className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-violet-700 hover:bg-violet-50/60 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-500" />
+              Remplir depuis une réservation
+            </span>
+            {importOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          <AnimatePresence>
+            {importOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 pb-4 space-y-3 border-t border-violet-100/60">
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Importez une capture d'écran, un PDF ou collez votre e-mail de confirmation — l'IA pré-rempli automatiquement les informations du voyage et crée le premier événement.
+                  </p>
+
+                  {/* Mode tabs */}
+                  <div className="flex gap-2">
+                    {(["file", "email"] as const).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => { setImportMode(m); setAnalyzed(null); setAnalyzeError(null); }}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+                          importMode === m
+                            ? "bg-violet-600 text-white border-violet-600"
+                            : "bg-white/70 text-foreground border-border hover:border-violet-400"
+                        }`}
+                      >
+                        {m === "file" ? <Upload className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                        {m === "file" ? "Fichier" : "E-mail / Texte"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* File input */}
+                  {importMode === "file" && (
+                    <div>
+                      <input ref={fileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => { setFile(e.target.files?.[0] ?? null); setAnalyzed(null); setAnalyzeError(null); }} />
+                      {!file ? (
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full flex flex-col items-center gap-1.5 border-2 border-dashed border-violet-200 hover:border-violet-400 rounded-xl py-5 text-violet-400 hover:text-violet-600 transition-colors bg-white/50 hover:bg-violet-50/40"
+                        >
+                          <Upload className="w-6 h-6" />
+                          <span className="text-xs font-medium">Capture, PDF ou billet</span>
+                          <span className="text-[11px] opacity-70">JPG · PNG · PDF · WebP</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-white/60 rounded-xl px-3 py-2 border border-violet-100">
+                          <FileText className="w-5 h-5 text-violet-400 shrink-0" />
+                          <span className="text-xs font-medium truncate flex-1">{file.name}</span>
+                          <button type="button" onClick={() => { setFile(null); setAnalyzed(null); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="text-muted-foreground hover:text-destructive">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Email textarea */}
+                  {importMode === "email" && (
+                    <textarea
+                      rows={4}
+                      placeholder="Collez ici le contenu de votre e-mail de confirmation…"
+                      value={emailText}
+                      onChange={e => { setEmailText(e.target.value); setAnalyzed(null); setAnalyzeError(null); }}
+                      className="w-full text-xs rounded-xl border border-violet-200 bg-white/70 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 placeholder:text-muted-foreground"
+                    />
+                  )}
+
+                  {/* Error */}
+                  {analyzeError && (
+                    <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/5 rounded-lg px-3 py-2">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {analyzeError}
+                    </div>
+                  )}
+
+                  {/* Success banner */}
+                  {analyzed && (
+                    <div className="flex items-start gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                      <div>
+                        <p className="font-semibold">Réservation détectée !</p>
+                        <p className="text-emerald-600 mt-0.5">Les champs ont été pré-remplis. Un événement sera automatiquement créé à la validation.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Analyze button */}
+                  {!analyzed && (
+                    <button
+                      type="button"
+                      onClick={handleAnalyze}
+                      disabled={analyzing || (importMode === "file" ? !file : !emailText.trim())}
+                      className="w-full flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {analyzing ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Analyse en cours…</>
+                      ) : (
+                        <><Sparkles className="w-4 h-4" /> Analyser avec l'IA</>
+                      )}
+                    </button>
+                  )}
+                  {analyzed && (
+                    <button type="button" onClick={resetImport} className="w-full text-xs text-muted-foreground hover:text-foreground underline">
+                      Réimporter un autre document
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-        <div>
-          <Label>Destination</Label>
-          <Input required placeholder="Barcelone, Espagne" value={formData.destination} onChange={e => setFormData({ ...formData, destination: e.target.value })} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+
+        {/* ── Manual form ── */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label>Début</Label>
-            <Input type="date" required value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
+            <Label>Nom du voyage</Label>
+            <Input required placeholder="Roadtrip d'été" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
           </div>
           <div>
-            <Label>Fin</Label>
-            <Input type="date" required value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+            <Label>Destination</Label>
+            <Input required placeholder="Barcelone, Espagne" value={formData.destination} onChange={e => setFormData({ ...formData, destination: e.target.value })} />
           </div>
-        </div>
-        <div>
-          <Label>Description (optionnel)</Label>
-          <Input placeholder="Un petit mot sur le voyage…" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-        </div>
-        <div className="pt-2 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-          <Button type="submit" disabled={isPending}>
-            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Créer le voyage"}
-          </Button>
-        </div>
-      </form>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Début</Label>
+              <Input type="date" required value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} />
+            </div>
+            <div>
+              <Label>Fin</Label>
+              <Input type="date" required value={formData.endDate} onChange={e => setFormData({ ...formData, endDate: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <Label>Description (optionnel)</Label>
+            <Input placeholder="Un petit mot sur le voyage…" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+          </div>
+          <div className="pt-2 flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : analyzed ? "Créer le voyage + événement" : "Créer le voyage"}
+            </Button>
+          </div>
+        </form>
+      </div>
     </Modal>
   );
 }
