@@ -1228,29 +1228,58 @@ export default function TripDetails() {
       {/* Header — sticky glass bar, 3-column grid */}
       <header className="sticky top-0 z-30 bg-white/55 backdrop-blur-2xl border-b border-white/60">
         <div className="max-w-3xl mx-auto px-4">
-          {/* Row 1 — nav */}
-          <div className="h-12 grid grid-cols-3 items-center">
+          {/* Row 1 — nav: back | trip name | status + pdf */}
+          <div className="h-12 grid grid-cols-[auto_1fr_auto] items-center gap-2">
             <Link href="/">
-              <button className="flex items-center gap-1 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors">
+              <button className="flex items-center gap-0.5 text-slate-500 hover:text-slate-700 text-sm font-medium transition-colors shrink-0">
                 <ChevronLeft className="w-4 h-4" />
-                <span>Retour</span>
+                <span className="hidden sm:inline">Retour</span>
               </button>
             </Link>
-            <div className="flex justify-center">
-              <img src={logoImg} alt="Ready2Go" className="h-7 w-auto" />
+            <div className="min-w-0 text-center">
+              {trip ? (
+                <p className="text-sm font-bold text-slate-800 truncate leading-tight">{trip.name}</p>
+              ) : (
+                <img src={logoImg} alt="Ready2Go" className="h-7 w-auto mx-auto" />
+              )}
             </div>
-            <div className="flex justify-end">
+            <div className="flex items-center gap-1.5 shrink-0">
               {tripStatus && (
-                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", tripStatus.color)}>
+                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap", tripStatus.color)}>
                   {tripStatus.label}
                 </span>
               )}
             </div>
           </div>
-          {/* Row 2 — trip summary */}
-          {tripSummary && (
-            <div className="pb-1 overflow-x-auto no-scrollbar">
-              <p className="text-[11px] text-slate-400 whitespace-nowrap select-none">{tripSummary}</p>
+          {/* Row 2 — destination + compact summary chips */}
+          {trip && (
+            <div className="pb-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                <MapPin className="w-3 h-3 text-primary/60 shrink-0" />
+                {trip.destination}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                <CalendarDays className="w-3 h-3 text-primary/60 shrink-0" />
+                {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "dd MMM yy", { locale: fr })}
+              </span>
+              {(trip.members as any[])?.length > 0 && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="flex items-center gap-1 text-[11px] text-slate-500 shrink-0">
+                    <Users className="w-3 h-3 text-primary/60 shrink-0" />
+                    {(trip.members as any[]).length} membre{(trip.members as any[]).length > 1 ? "s" : ""}
+                  </span>
+                </>
+              )}
+              {(trip.events as any[])?.length > 0 && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-[11px] text-slate-500 shrink-0">
+                    {(trip.events as any[]).length} événement{(trip.events as any[]).length > 1 ? "s" : ""}
+                  </span>
+                </>
+              )}
             </div>
           )}
           {/* Row 3 — travel tips (collapsible, always visible when trip loaded) */}
@@ -1290,34 +1319,80 @@ export default function TripDetails() {
         </div>
       </header>
 
-      {/* Trip info card */}
+      {/* ── Résumé voyage ────────────────────────────────────────────────── */}
       <div className="max-w-3xl mx-auto px-4 pt-4 relative z-10">
-        <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl shadow-sm px-4 py-3 mb-4">
-          <h1 className="text-xl font-bold text-slate-800 leading-snug mb-1.5">{trip.name}</h1>
-          <div className="flex items-center gap-4 text-slate-500 text-sm mb-3">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 shrink-0 text-primary/70" />
-              {trip.destination}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CalendarDays className="w-3.5 h-3.5 shrink-0 text-primary/70" />
-              {format(parseDateLocal(trip.startDate), "dd MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "dd MMM yy", { locale: fr })}
-            </span>
-          </div>
-          {/* Groupe counter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Groupe</span>
-            <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-xl px-2.5 py-1">
-              <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">−</button>
-              <span className="text-sm font-bold w-5 text-center text-slate-700">{groupSize}</span>
-              <button type="button" onClick={() => setGroupSize(n => Math.min(50, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">+</button>
-              <span className="text-[11px] text-slate-400 ml-1">adulte{groupSize > 1 ? "s" : ""}</span>
+        <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl shadow-sm overflow-hidden mb-4">
+          {/* Countdown banner — only for future trips */}
+          {tripStatus && tripStatus.label.startsWith("J−") && (() => {
+            const days = parseInt(tripStatus.label.replace("J−", ""), 10);
+            return (
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Plane className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold text-sm leading-tight">Dans {days} jour{days > 1 ? "s" : ""} !</p>
+                  <p className="text-blue-100 text-[11px]">
+                    {format(parseDateLocal(trip.startDate), "EEEE d MMMM yyyy", { locale: fr })}
+                  </p>
+                </div>
+                <div className="ml-auto text-right">
+                  <p className="text-white font-black text-2xl leading-none">{days}</p>
+                  <p className="text-blue-200 text-[10px] font-semibold uppercase tracking-wider">jours</p>
+                </div>
+              </div>
+            );
+          })()}
+          {/* In-progress banner */}
+          {tripStatus?.label === "En cours" && (
+            <div className="bg-gradient-to-r from-green-500 to-emerald-500 px-4 py-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <p className="text-white font-semibold text-sm">Voyage en cours</p>
+              <span className="ml-auto text-green-100 text-[11px]">
+                {format(parseDateLocal(trip.startDate), "d MMM", { locale: fr })} – {format(parseDateLocal(trip.endDate), "d MMM yy", { locale: fr })}
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-xl px-2.5 py-1">
-              <button type="button" onClick={() => setGroupChildren(n => Math.max(0, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">−</button>
-              <span className="text-sm font-bold w-5 text-center text-slate-700">{groupChildren}</span>
-              <button type="button" onClick={() => setGroupChildren(n => Math.min(20, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">+</button>
-              <span className="text-[11px] text-slate-400 ml-1">enfant{groupChildren > 1 ? "s" : ""}</span>
+          )}
+          <div className="px-4 py-3">
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {/* Duration */}
+              <div className="bg-slate-50/80 rounded-xl px-3 py-2 text-center">
+                <p className="text-lg font-black text-slate-800 leading-none">
+                  {Math.round((parseDateLocal(trip.endDate).getTime() - parseDateLocal(trip.startDate).getTime()) / 86400000) + 1}
+                </p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">jours</p>
+              </div>
+              {/* Members */}
+              <div className="bg-slate-50/80 rounded-xl px-3 py-2 text-center">
+                <p className="text-lg font-black text-slate-800 leading-none">{(trip.members as any[])?.length ?? 0}</p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                  {((trip.members as any[])?.length ?? 0) > 1 ? "membres" : "membre"}
+                </p>
+              </div>
+              {/* Events */}
+              <div className="bg-slate-50/80 rounded-xl px-3 py-2 text-center">
+                <p className="text-lg font-black text-slate-800 leading-none">{(trip.events as any[])?.length ?? 0}</p>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
+                  {((trip.events as any[])?.length ?? 0) > 1 ? "événements" : "événement"}
+                </p>
+              </div>
+            </div>
+            {/* Groupe counter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Groupe</span>
+              <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-xl px-2.5 py-1">
+                <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">−</button>
+                <span className="text-sm font-bold w-5 text-center text-slate-700">{groupSize}</span>
+                <button type="button" onClick={() => setGroupSize(n => Math.min(50, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">+</button>
+                <span className="text-[11px] text-slate-400 ml-1">adulte{groupSize > 1 ? "s" : ""}</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-xl px-2.5 py-1">
+                <button type="button" onClick={() => setGroupChildren(n => Math.max(0, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">−</button>
+                <span className="text-sm font-bold w-5 text-center text-slate-700">{groupChildren}</span>
+                <button type="button" onClick={() => setGroupChildren(n => Math.min(20, n + 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">+</button>
+                <span className="text-[11px] text-slate-400 ml-1">enfant{groupChildren > 1 ? "s" : ""}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1356,6 +1431,11 @@ export default function TripDetails() {
       </div>
 
       <main className="max-w-3xl mx-auto px-4 relative z-10">
+        {/* ── Bandeau actualités — visible on all tabs ──────────────────── */}
+        <NewsTicker
+          destination={trip.destination}
+          events={(trip.events ?? []) as any[]}
+        />
         {/* Tabs */}
         <div className="bg-white/60 backdrop-blur-xl p-1 rounded-2xl shadow-md shadow-blue-900/[0.07] border border-white/70 flex gap-0.5 mb-6 overflow-x-auto">
           {([
@@ -1562,11 +1642,6 @@ export default function TripDetails() {
                 />
                 </div>
               )}
-              {/* News ticker — bottom of programme tab */}
-              <NewsTicker
-                destination={trip.destination}
-                events={(trip.events ?? []) as any[]}
-              />
             </div>
           ) : activeTab === "group" ? (
             <div className="space-y-5">
