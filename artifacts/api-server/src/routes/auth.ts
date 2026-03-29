@@ -1,10 +1,9 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { authRateLimiter } from "../middleware/rateLimit";
+import * as gdb from "../github-db";
 
 const router: IRouter = Router();
 
@@ -35,32 +34,20 @@ function signToken(userId: number, username: string) {
 router.post("/auth/register", authRateLimiter, async (req, res) => {
   try {
     const body = RegisterBody.parse(req.body);
+    const existing = await gdb.getUserByUsername(body.username);
 
-    const existing = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.username, body.username))
-      .limit(1);
-
-    if (existing.length > 0 && existing[0].passwordHash) {
+    if (existing?.passwordHash) {
       res.status(409).json({ error: "Ce nom d'utilisateur est déjà pris." });
       return;
     }
 
     const passwordHash = await bcrypt.hash(body.password, 12);
+    let user: gdb.User;
 
-    let user;
-    if (existing.length > 0) {
-      [user] = await db
-        .update(usersTable)
-        .set({ passwordHash })
-        .where(eq(usersTable.username, body.username))
-        .returning();
+    if (existing) {
+      user = (await gdb.updateUser(existing.id, { passwordHash })) ?? existing;
     } else {
-      [user] = await db
-        .insert(usersTable)
-        .values({ username: body.username, passwordHash })
-        .returning();
+      user = await gdb.createUser({ username: body.username, passwordHash });
     }
 
     const token = signToken(user.id, user.username);
@@ -78,14 +65,9 @@ router.post("/auth/register", authRateLimiter, async (req, res) => {
 router.post("/auth/login", authRateLimiter, async (req, res) => {
   try {
     const body = LoginBody.parse(req.body);
+    const user = await gdb.getUserByUsername(body.username);
 
-    const [user] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.username, body.username))
-      .limit(1);
-
-    if (!user || !user.passwordHash) {
+    if (!user?.passwordHash) {
       await bcrypt.hash("dummy", 12);
       res.status(401).json({ error: "Identifiants incorrects." });
       return;

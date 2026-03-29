@@ -29,7 +29,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = authHeader.slice(7);
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, JWT_SECRET) as unknown as JwtPayload;
     req.user = { userId: payload.sub, username: payload.username };
     next();
   } catch {

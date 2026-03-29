@@ -11,7 +11,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
+- **Database (production/Vercel)**: GitHub JSON DB (`artifacts/api-server/src/github-db.ts`) — stores data as JSON files in a private GitHub repo (`filomindimitri91-eng/ready2go-data`)
+- **Database (local dev)**: same GitHub JSON DB — uses GITHUB_TOKEN + GITHUB_DB_OWNER + GITHUB_DB_REPO env vars
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
