@@ -1099,7 +1099,7 @@ export default function TripDetails() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -1107,7 +1107,7 @@ export default function TripDetails() {
 
   if (isError || !trip) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100 p-4 text-center">
         <h2 className="text-2xl font-bold mb-2">Voyage introuvable</h2>
         <p className="text-muted-foreground mb-6">Ce voyage n'existe pas ou vous n'y avez pas accès.</p>
         <Link href="/"><Button>Retour à l'accueil</Button></Link>
@@ -1116,7 +1116,11 @@ export default function TripDetails() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100 pb-24 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-200/50 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-indigo-200/40 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 right-1/4 w-56 h-56 rounded-full bg-sky-200/40 blur-2xl pointer-events-none" />
       {/* Header */}
       <div className="bg-primary text-primary-foreground pt-10 pb-6 px-4 rounded-b-[2.5rem] shadow-xl relative">
         <div className="max-w-3xl mx-auto">

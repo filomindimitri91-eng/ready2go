@@ -159,9 +159,13 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100 pb-24 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-200/50 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-indigo-200/40 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 right-1/4 w-56 h-56 rounded-full bg-sky-200/40 blur-2xl pointer-events-none" />
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border">
+      <header className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-white/40 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={logoImg} alt="Ready2Go" className="h-9 w-auto" />
