@@ -1220,7 +1220,7 @@ export default function TripDetails() {
             </span>
           </div>
           {/* Groupe counter */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Groupe</span>
             <div className="flex items-center gap-1.5 bg-slate-100/80 rounded-xl px-2.5 py-1">
               <button type="button" onClick={() => setGroupSize(n => Math.max(1, n - 1))} className="w-5 h-5 flex items-center justify-center rounded-full bg-white border border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50 transition-colors">−</button>
