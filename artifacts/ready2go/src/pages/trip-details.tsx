@@ -1207,7 +1207,7 @@ export default function TripDetails() {
 
       <main className="max-w-3xl mx-auto px-4 relative z-10">
         {/* Tabs */}
-        <div className="bg-card p-1 rounded-2xl shadow-lg border border-border/50 flex gap-0.5 mb-8 overflow-x-auto">
+        <div className="bg-white/60 backdrop-blur-xl p-1 rounded-2xl shadow-md shadow-blue-900/[0.07] border border-white/70 flex gap-0.5 mb-6 overflow-x-auto">
           {([
             { id: "program",  emoji: "📅", label: "Programme" },
             { id: "group",    emoji: "👥", label: "Groupe" },
@@ -1239,9 +1239,9 @@ export default function TripDetails() {
           {activeTab === "program" ? (
             <div className="space-y-8">
               {sortedDates.length === 0 ? (
-                <div className="text-center py-16 bg-card border border-dashed rounded-3xl">
-                  <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CalendarDays className="w-8 h-8 text-muted-foreground" />
+                <div className="text-center py-16 bg-white/60 backdrop-blur-xl border border-dashed border-white/80 rounded-3xl shadow-sm">
+                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <CalendarDays className="w-8 h-8 text-blue-300" />
                   </div>
                   <h3 className="text-lg font-bold mb-2">Programme vide</h3>
                   <p className="text-muted-foreground text-sm max-w-xs mx-auto">
@@ -1251,7 +1251,7 @@ export default function TripDetails() {
               ) : (
                 sortedDates.map((date) => (
                   <div key={date}>
-                    <h3 className="sticky top-16 z-20 py-2 bg-background/95 backdrop-blur-md text-lg font-bold text-foreground border-b border-border/50 mb-4 flex items-center gap-2">
+                    <h3 className="sticky top-16 z-20 py-2 bg-white/70 backdrop-blur-md text-base font-bold text-slate-700 border-b border-white/60 mb-4 flex items-center gap-2">
                       <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">
                         {format(parseDateLocal(date), "dd")}
                       </span>
@@ -1318,7 +1318,7 @@ export default function TripDetails() {
           ) : activeTab === "group" ? (
             <div className="space-y-5">
               {/* Invite Code */}
-              <div className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/15 rounded-2xl px-4 py-3">
+              <div className="flex items-center justify-between gap-3 bg-blue-50/70 backdrop-blur-md border border-blue-100/80 rounded-2xl px-4 py-3">
                 <div>
                   <p className="text-xs font-semibold text-primary uppercase tracking-wider">Code d'invitation</p>
                   <p className="text-2xl font-mono font-bold tracking-widest text-foreground mt-0.5">{trip.inviteCode}</p>
@@ -1333,7 +1333,7 @@ export default function TripDetails() {
               </div>
 
               {/* Location sharing */}
-              <div className="bg-card border border-border/50 rounded-2xl p-4 space-y-3">
+              <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-sm">📍 Position en direct</p>
@@ -1372,7 +1372,7 @@ export default function TripDetails() {
                 <p className="text-sm font-semibold text-muted-foreground mb-2">Participants ({trip.members.length})</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {trip.members.map((member) => (
-                    <div key={member.id} className="flex items-center gap-3 p-3 bg-card rounded-xl border border-border/50">
+                    <div key={member.id} className="flex items-center gap-3 p-3 bg-white/65 backdrop-blur-md rounded-xl border border-white/70">
                       <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-accent text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
                         {member.username.charAt(0).toUpperCase()}
                       </div>
@@ -1388,7 +1388,7 @@ export default function TripDetails() {
               </div>
 
               {/* Group Chat */}
-              <div className="bg-card border border-border/50 rounded-2xl overflow-hidden">
+              <div className="bg-white/65 backdrop-blur-md border border-white/70 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-border/50 flex items-center gap-2">
                   <span className="text-base">💬</span>
                   <p className="font-semibold text-sm">Tchat du groupe</p>
