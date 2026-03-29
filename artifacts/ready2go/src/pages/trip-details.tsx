@@ -1989,6 +1989,16 @@ const BOOKING_PARTNERS = [
     eventType: "activite" as EventType,
     subtype: "concert",
   },
+  {
+    key: "skiset",
+    label: "Skiset.com",
+    subtitle: "Location de ski",
+    emoji: "⛷️",
+    bgClass: "bg-sky-50 border-sky-200",
+    url: "https://www.skiset.com/",
+    eventType: "activite" as EventType,
+    subtype: "randonnee",
+  },
 ];
 
 function BookingLinksSection({ onAddFromBooking }: {
